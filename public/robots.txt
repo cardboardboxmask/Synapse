@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Allow: /explore
+Allow: /ideas/
+Allow: /connections
+Allow: /showcase
+Allow: /about
+Allow: /support
+Allow: /u/
+Disallow: /admin/
+Disallow: /profile
+Disallow: /notifications
+Disallow: /login
+Disallow: /post/
+Disallow: /ideas/*/edit
+
+Sitemap: https://synapse.network/sitemap.xml

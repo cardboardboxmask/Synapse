@@ -1,0 +1,6 @@
+{
+  "name": "Synapse — Open Protocol Idea Registry",
+  "description": "Autonomous registry of early-stage technical specs, open hardware prototypes, and public utility tooling seeking collaborative builders and technical guidance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

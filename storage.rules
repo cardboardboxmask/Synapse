@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidImageUpload(maxSizeBytes) {
+      return request.resource != null &&
+        request.resource.size > 0 &&
+        request.resource.size <= maxSizeBytes &&
+        request.resource.contentType.matches('image/(jpeg|png|webp)') &&
+        request.resource.name.matches('.*[.](jpg|jpeg|png|webp)$');
+    }
+
+    // User profile avatars: public read, owner-only write/delete (max 2MB)
+    match /users/{uid}/avatar/{fileName} {
+      allow read: if true;
+      allow create, update: if isOwner(uid) && isValidImageUpload(2 * 1024 * 1024);
+      allow delete: if isOwner(uid);
+    }
+
+    // Idea specification diagrams & showcase screenshots: public read, owner-only write/delete (max 5MB)
+    match /ideas/{ideaId}/attachments/{uid}/{fileName} {
+      allow read: if true;
+      allow create, update: if isOwner(uid) && isValidImageUpload(5 * 1024 * 1024);
+      allow delete: if isOwner(uid);
+    }
+
+    // Default deny all other storage paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

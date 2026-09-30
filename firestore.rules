@@ -1,0 +1,567 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'cardboardboxmask@gmail.com' &&
+         request.auth.token.email_verified == true) ||
+        request.auth.uid == 'kETq37KlCWR7k3MqSCa14zszoA22'
+      );
+    }
+
+    function isNotSuspended() {
+      return isSignedIn() && (
+        isAdmin() ||
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('accountStatus', 'active') != 'disabled'
+        )
+      );
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) || data[field] == null || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isOptionalBool(data, field) {
+      return !(field in data) || data[field] == null || (data[field] is bool);
+    }
+
+    function isReservedUsername(uname) {
+      return uname in [
+        'admin',
+        'admins',
+        'administrator',
+        'founder',
+        'synapse',
+        'support',
+        'system',
+        'root',
+        'moderator',
+        'mod',
+        'api',
+        'explore',
+        'login',
+        'logout',
+        'profile',
+        'showcase',
+        'connections',
+        'notifications',
+        'about',
+        'post',
+        'ideas',
+        'anonymous',
+        'null',
+        'undefined',
+        'security',
+        'help'
+      ];
+    }
+
+    function isIdeaOwner(ideaId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/ideas/$(ideaId)) &&
+        get(/databases/$(database)/documents/ideas/$(ideaId)).data.authorId == request.auth.uid;
+    }
+
+    function isSeedIdeaId(ideaId) {
+      return ideaId in [
+        'seed-localmesh',
+        'seed-openpaperclip',
+        'seed-promptdiff',
+        'seed-syncshelf',
+        'seed-solarstitch',
+        'seed-formless'
+      ];
+    }
+
+    function isValidIdeaShape(data) {
+      return isValidString(data.title, 3, 150) &&
+        isValidString(data.summary, 3, 500) &&
+        isValidString(data.problem, 3, 5000) &&
+        isValidString(data.solution, 3, 5000) &&
+        isOptionalString(data, 'helpWanted', 3000) &&
+        isOptionalString(data, 'existingCheckNote', 2000) &&
+        isOptionalString(data, 'targetUsers', 2500) &&
+        isOptionalString(data, 'knownBlockers', 2500) &&
+        isOptionalString(data, 'collaborationExpectations', 2500) &&
+        isOptionalString(data, 'referenceLinks', 2500) &&
+        isOptionalString(data, 'diagramUrl', 500000) &&
+        data.category in ['Software', 'Hardware', 'AI', 'Web', 'Other'] &&
+        data.tags is list && data.tags.size() <= 15 &&
+        data.helpTrack in ['guidance', 'builder'] &&
+        data.status in ['open', 'in-progress', 'built'] &&
+        data.license in ['all-rights-kept', 'cc-by', 'mit'] &&
+        isValidString(data.authorId, 1, 128) &&
+        isValidString(data.authorName, 1, 100) &&
+        isValidString(data.authorUsername, 1, 60) &&
+        data.isSeed is bool &&
+        data.responseCount is int && data.responseCount >= 0 &&
+        data.volunteerCount is int && data.volunteerCount >= 0 &&
+        data.connectionCount is int && data.connectionCount >= 0 &&
+        data.communityCheckSimilar is int && data.communityCheckSimilar >= 0 &&
+        data.communityCheckNew is int && data.communityCheckNew >= 0 &&
+        isOptionalString(data, 'showcaseUrl', 500) &&
+        isOptionalString(data, 'showcaseCredits', 1000) &&
+        isOptionalString(data, 'showcaseNotes', 2000) &&
+        isOptionalBool(data, 'adminVerified') &&
+        isOptionalString(data, 'adminVerifiedAt', 60) &&
+        isOptionalString(data, 'adminVerifiedBy', 128) &&
+        isValidString(data.createdAt, 10, 60) &&
+        isValidString(data.updatedAt, 10, 60);
+    }
+
+    // Lifecycle Status Integrity:
+    // Primary lifecycle: open -> in-progress -> built.
+    // Once 'built', non-admin owners cannot revert status back to 'open' or 'in-progress'.
+    function isValidIdeaStatusTransition(oldStatus, newStatus) {
+      return oldStatus == newStatus ||
+        isAdmin() ||
+        (oldStatus == 'open' && (newStatus == 'in-progress' || newStatus == 'built')) ||
+        (oldStatus == 'in-progress' && (newStatus == 'built' || newStatus == 'open'));
+    }
+
+    function countersStartAtZero(data) {
+      return data.responseCount == 0 &&
+        data.volunteerCount == 0 &&
+        data.connectionCount == 0 &&
+        data.communityCheckSimilar == 0 &&
+        data.communityCheckNew == 0;
+    }
+
+    function isSingleStepCounterTransaction(newData, oldData) {
+      let changed = newData.diff(oldData).affectedKeys();
+      return changed.hasOnly([
+        'responseCount',
+        'volunteerCount',
+        'connectionCount',
+        'communityCheckSimilar',
+        'communityCheckNew',
+        'updatedAt'
+      ]) &&
+      newData.responseCount is int && newData.responseCount >= 0 &&
+      math.abs(newData.responseCount - oldData.responseCount) <= 1 &&
+      newData.volunteerCount is int && newData.volunteerCount >= 0 &&
+      math.abs(newData.volunteerCount - oldData.volunteerCount) <= 1 &&
+      newData.connectionCount is int && newData.connectionCount >= 0 &&
+      math.abs(newData.connectionCount - oldData.connectionCount) <= 1 &&
+      newData.communityCheckSimilar is int && newData.communityCheckSimilar >= 0 &&
+      math.abs(newData.communityCheckSimilar - oldData.communityCheckSimilar) <= 1 &&
+      newData.communityCheckNew is int && newData.communityCheckNew >= 0 &&
+      math.abs(newData.communityCheckNew - oldData.communityCheckNew) <= 1;
+    }
+
+    function isValidAuditLog(data) {
+      return isValidString(data.actorId, 1, 128) &&
+        isValidString(data.actorName, 1, 100) &&
+        data.action in [
+          'report.resolve',
+          'report.dismiss',
+          'report.delete',
+          'content.delete_idea',
+          'content.delete_response',
+          'idea.status_change',
+          'idea.verify_change',
+          'volunteer.status_change',
+          'connection.create',
+          'connection.status_change',
+          'connection.delete',
+          'account.delete',
+          'account.username_change',
+          'account.suspend_change',
+          'admin.reauth.success',
+          'admin.reauth.failure',
+          'admin.webauthn.success',
+          'admin.webauthn.failure',
+          'admin.panel.lock',
+          'admin.panel.timeout',
+          'admin.panel.access_denied'
+        ] &&
+        (
+          !(data.action in [
+            'admin.reauth.success',
+            'admin.reauth.failure',
+            'admin.webauthn.success',
+            'admin.webauthn.failure',
+            'admin.panel.lock',
+            'admin.panel.timeout'
+          ]) || isAdmin()
+        ) &&
+        data.targetType in ['idea', 'response', 'user', 'report', 'volunteer', 'connection', 'admin'] &&
+        isValidString(data.targetId, 1, 128) &&
+        isValidString(data.summary, 1, 1000) &&
+        isValidString(data.createdAt, 10, 60);
+    }
+
+    // ===============================================================
+    // 1. Users Collection & Unique Usernames Registry
+    // ===============================================================
+    match /users/{uid} {
+      // Public maker profiles can be viewed by anyone; only the owner (or admin) can create or update their own profile.
+      allow read: if true;
+
+      allow create: if (isOwner(uid) || isAdmin()) &&
+        (!('uid' in request.resource.data) || request.resource.data.uid == uid) &&
+        isValidString(request.resource.data.displayName, 1, 100) &&
+        isValidString(request.resource.data.username, 2, 60) &&
+        !isReservedUsername(request.resource.data.username) &&
+        isOptionalString(request.resource.data, 'photoURL', 500000) &&
+        isOptionalString(request.resource.data, 'avatarUrl', 500000) &&
+        isOptionalString(request.resource.data, 'bio', 1000) &&
+        isOptionalBool(request.resource.data, 'deleted') &&
+        isOptionalBool(request.resource.data, 'suspended') &&
+        isOptionalString(request.resource.data, 'suspendedAt', 60) &&
+        isOptionalString(request.resource.data, 'suspendedReason', 500) &&
+        (!('accountStatus' in request.resource.data) || request.resource.data.accountStatus in ['active', 'disabled', 'deleted']) &&
+        (isAdmin() || request.resource.data.get('suspended', false) == false) &&
+        isOptionalString(request.resource.data, 'createdAt', 60) &&
+        isOptionalString(request.resource.data, 'updatedAt', 60);
+
+      allow update: if (isOwner(uid) || isAdmin()) &&
+        (!('uid' in resource.data) || !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid) &&
+        isValidString(request.resource.data.displayName, 1, 100) &&
+        isValidString(request.resource.data.username, 2, 60) &&
+        (
+          !('username' in resource.data) ||
+          request.resource.data.username == resource.data.username ||
+          request.resource.data.get('deleted', false) == true ||
+          !isReservedUsername(request.resource.data.username)
+        ) &&
+        isOptionalString(request.resource.data, 'photoURL', 500000) &&
+        isOptionalString(request.resource.data, 'avatarUrl', 500000) &&
+        isOptionalString(request.resource.data, 'bio', 1000) &&
+        isOptionalBool(request.resource.data, 'deleted') &&
+        isOptionalBool(request.resource.data, 'suspended') &&
+        isOptionalString(request.resource.data, 'suspendedAt', 60) &&
+        isOptionalString(request.resource.data, 'suspendedReason', 500) &&
+        (!('accountStatus' in request.resource.data) || request.resource.data.accountStatus in ['active', 'disabled', 'deleted']) &&
+        (isAdmin() || (
+          request.resource.data.get('suspended', false) == resource.data.get('suspended', false) &&
+          request.resource.data.get('accountStatus', 'active') != 'disabled'
+        )) &&
+        isOptionalString(request.resource.data, 'createdAt', 60) &&
+        isOptionalString(request.resource.data, 'updatedAt', 60);
+
+      allow delete: if isOwner(uid) || isAdmin();
+
+      // Private user notifications
+      match /notifications/{notificationId} {
+        allow read: if isOwner(uid) || isAdmin();
+        // Any signed-in user can trigger a notification to another user when responding, volunteering, or connecting
+        allow create: if isSignedIn() &&
+          request.resource.data.recipientId == uid &&
+          request.resource.data.type in ['response', 'volunteer', 'connection', 'status-change'] &&
+          isValidString(request.resource.data.title, 1, 200) &&
+          isValidString(request.resource.data.message, 1, 1000) &&
+          isValidString(request.resource.data.link, 1, 300) &&
+          isOptionalString(request.resource.data, 'targetId', 128) &&
+          request.resource.data.read == false &&
+          request.resource.data.actorId == request.auth.uid &&
+          isValidString(request.resource.data.actorName, 1, 100) &&
+          isValidString(request.resource.data.createdAt, 10, 60);
+
+        // Recipient can mark notification as read, or actor can refresh deduplicated unread notification
+        allow update: if (isOwner(uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'updatedAt', 'targetDeleted']) &&
+          request.resource.data.read is bool) ||
+          (isSignedIn() &&
+            resource.data.actorId == request.auth.uid &&
+            request.resource.data.recipientId == uid &&
+            request.resource.data.actorId == request.auth.uid &&
+            request.resource.data.type == resource.data.type &&
+            isValidString(request.resource.data.title, 1, 200) &&
+            isValidString(request.resource.data.message, 1, 1000) &&
+            isValidString(request.resource.data.createdAt, 10, 60));
+
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      // User's saved idea bookmarks
+      match /bookmarks/{ideaId} {
+        allow read: if isOwner(uid) || isAdmin();
+
+        allow create: if isOwner(uid) &&
+          request.resource.data.userId == uid &&
+          request.resource.data.ideaId == ideaId &&
+          isValidString(request.resource.data.ideaId, 1, 128) &&
+          isValidString(request.resource.data.ideaTitle, 1, 150) &&
+          isValidString(request.resource.data.ideaSummary, 1, 500) &&
+          request.resource.data.ideaCategory in ['Software', 'Hardware', 'AI', 'Web', 'Other'] &&
+          request.resource.data.ideaHelpTrack in ['guidance', 'builder'] &&
+          isOptionalString(request.resource.data, 'note', 500) &&
+          isValidString(request.resource.data.createdAt, 10, 60);
+
+        allow update: if isOwner(uid) &&
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.ideaId == resource.data.ideaId &&
+          isValidString(request.resource.data.ideaTitle, 1, 150) &&
+          isValidString(request.resource.data.ideaSummary, 1, 500) &&
+          request.resource.data.ideaCategory in ['Software', 'Hardware', 'AI', 'Web', 'Other'] &&
+          request.resource.data.ideaHelpTrack in ['guidance', 'builder'] &&
+          isOptionalString(request.resource.data, 'note', 500);
+
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // Unique Username Claims Registry
+    match /usernames/{username} {
+      allow read: if true;
+
+      allow create: if isSignedIn() &&
+        !isReservedUsername(username) &&
+        isValidString(username, 3, 40) &&
+        request.resource.data.username == username &&
+        request.resource.data.uid == request.auth.uid &&
+        isOptionalString(request.resource.data, 'createdAt', 60) &&
+        isOptionalString(request.resource.data, 'updatedAt', 60);
+
+      allow update: if (isOwner(resource.data.uid) || isAdmin()) &&
+        request.resource.data.username == username &&
+        request.resource.data.uid == request.auth.uid &&
+        isOptionalString(request.resource.data, 'updatedAt', 60);
+
+      allow delete: if isOwner(resource.data.uid) || isAdmin();
+    }
+
+    // ===============================================================
+    // 2. Ideas Collection & Subcollections
+    // ===============================================================
+    match /ideas/{ideaId} {
+      // Anyone can browse public ideas without signing in
+      allow read: if true;
+
+      // Signed-in users can create ideas (with counters strictly 0), OR initial 6 founder seed ideas can be bootstrapped once
+      allow create: if isValidIdeaShape(request.resource.data) &&
+        countersStartAtZero(request.resource.data) &&
+        (isAdmin() || request.resource.data.get('adminVerified', false) == false) &&
+        (
+          (isSignedIn() &&
+            isNotSuspended() &&
+            request.resource.data.authorId == request.auth.uid &&
+            request.resource.data.isSeed == false &&
+            request.resource.data.status == 'open') ||
+          (isSeedIdeaId(ideaId) &&
+            !exists(/databases/$(database)/documents/ideas/$(ideaId)) &&
+            request.resource.data.isSeed == true &&
+            request.resource.data.authorId == 'founder')
+        );
+
+      // Only the idea owner (or admin) can edit their idea or change its status following legal transitions;
+      // Only an admin can modify adminVerified status;
+      // Signed-in users can increment/decrement counters by 1 inside a transaction when adding/removing a response, volunteer, or connection.
+      allow update: if isValidIdeaShape(request.resource.data) &&
+        request.resource.data.authorId == resource.data.authorId &&
+        request.resource.data.isSeed == resource.data.isSeed &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        (isAdmin() || request.resource.data.get('adminVerified', false) == resource.data.get('adminVerified', false)) &&
+        (
+          ((isOwner(resource.data.authorId) || isAdmin()) &&
+            isNotSuspended() &&
+            isValidIdeaStatusTransition(resource.data.status, request.resource.data.status) &&
+            request.resource.data.responseCount == resource.data.responseCount &&
+            request.resource.data.volunteerCount == resource.data.volunteerCount &&
+            request.resource.data.connectionCount == resource.data.connectionCount &&
+            request.resource.data.communityCheckSimilar == resource.data.communityCheckSimilar &&
+            request.resource.data.communityCheckNew == resource.data.communityCheckNew) ||
+          (isSignedIn() && isNotSuspended() && isSingleStepCounterTransaction(request.resource.data, resource.data))
+        );
+
+      // Only the idea owner or an admin can delete an idea
+      allow delete: if isOwner(resource.data.authorId) || isAdmin();
+
+      // Subcollection: Specification Revisions
+      match /revisions/{revisionId} {
+        allow read: if true;
+
+        allow create: if isSignedIn() &&
+          (isIdeaOwner(ideaId) || isAdmin()) &&
+          request.resource.data.ideaId == ideaId &&
+          request.resource.data.editorId == request.auth.uid &&
+          isValidString(request.resource.data.editorName, 1, 100) &&
+          request.resource.data.changedFields is list &&
+          request.resource.data.changedFields.size() <= 20 &&
+          isValidString(request.resource.data.previousTitle, 1, 150) &&
+          isValidString(request.resource.data.previousSummary, 1, 500) &&
+          request.resource.data.previousStatus in ['open', 'in-progress', 'built'] &&
+          isValidString(request.resource.data.createdAt, 10, 60);
+
+        allow update: if false;
+        allow delete: if isIdeaOwner(ideaId) || isAdmin();
+      }
+
+      // Subcollection: Responses
+      match /responses/{responseId} {
+        allow read: if true;
+
+        allow create: if isSignedIn() && isNotSuspended() &&
+          request.resource.data.ideaId == ideaId &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.type in ['guidance', 'offer-to-build', 'connection', 'similar-check'] &&
+          isValidString(request.resource.data.content, 2, 3000) &&
+          isOptionalString(request.resource.data, 'referenceUrl', 500) &&
+          isValidString(request.resource.data.authorName, 1, 100) &&
+          isValidString(request.resource.data.authorUsername, 1, 60) &&
+          isValidString(request.resource.data.createdAt, 10, 60) &&
+          isValidString(request.resource.data.updatedAt, 10, 60);
+
+        // Only the response author can edit their response
+        allow update: if isOwner(resource.data.authorId) && isNotSuspended() &&
+          request.resource.data.ideaId == resource.data.ideaId &&
+          request.resource.data.authorId == resource.data.authorId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.type in ['guidance', 'offer-to-build', 'connection', 'similar-check'] &&
+          isValidString(request.resource.data.content, 2, 3000) &&
+          isOptionalString(request.resource.data, 'referenceUrl', 500) &&
+          isValidString(request.resource.data.updatedAt, 10, 60);
+
+        // Response author, idea owner (during cascading idea deletion), or admin can delete
+        allow delete: if isOwner(resource.data.authorId) || isIdeaOwner(ideaId) || isAdmin();
+      }
+
+      // Subcollection: Volunteers
+      match /volunteers/{volunteerId} {
+        allow read: if true;
+
+        // Only a signed-in user (who is not the idea owner) can volunteer themselves (status must start as 'pending')
+        allow create: if isSignedIn() && isNotSuspended() &&
+          volunteerId == request.auth.uid &&
+          !isIdeaOwner(ideaId) &&
+          request.resource.data.ideaId == ideaId &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.status == 'pending' &&
+          isValidString(request.resource.data.ideaTitle, 1, 150) &&
+          isValidString(request.resource.data.userName, 1, 100) &&
+          isValidString(request.resource.data.userUsername, 1, 60) &&
+          isValidString(request.resource.data.role, 2, 200) &&
+          isValidString(request.resource.data.message, 2, 2000) &&
+          isValidString(request.resource.data.createdAt, 10, 60) &&
+          isValidString(request.resource.data.updatedAt, 10, 60);
+
+        // Only the idea owner (or admin) can accept or decline volunteers; the volunteer can update their own message/role only while pending
+        allow update: if isSignedIn() &&
+          request.resource.data.ideaId == resource.data.ideaId &&
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          isValidString(request.resource.data.role, 2, 200) &&
+          isValidString(request.resource.data.message, 2, 2000) &&
+          request.resource.data.status in ['pending', 'accepted', 'declined'] &&
+          (
+            ((isIdeaOwner(ideaId) || isAdmin()) &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+            (isOwner(resource.data.userId) &&
+              resource.data.status == 'pending' &&
+              request.resource.data.status == 'pending')
+          );
+
+        // Volunteer can withdraw their offer, or idea owner/admin can remove
+        allow delete: if isOwner(resource.data.userId) || isIdeaOwner(ideaId) || isAdmin();
+      }
+    }
+
+    // ===============================================================
+    // 3. Connections Collection (Admin & Connected Makers Control Only)
+    // ===============================================================
+    match /connections/{connectionId} {
+      allow read: if true;
+
+      allow create: if isSignedIn() && isNotSuspended() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        request.resource.data.ideaA != request.resource.data.ideaB &&
+        isValidString(request.resource.data.ideaA, 1, 128) &&
+        isValidString(request.resource.data.ideaATitle, 1, 150) &&
+        isOptionalString(request.resource.data, 'ideaAAuthorId', 128) &&
+        isOptionalString(request.resource.data, 'ideaAAuthorName', 100) &&
+        isValidString(request.resource.data.ideaB, 1, 128) &&
+        isValidString(request.resource.data.ideaBTitle, 1, 150) &&
+        isOptionalString(request.resource.data, 'ideaBAuthorId', 128) &&
+        isOptionalString(request.resource.data, 'ideaBAuthorName', 100) &&
+        isOptionalString(request.resource.data, 'pairKey', 260) &&
+        isValidString(request.resource.data.reason, 2, 1000) &&
+        isValidString(request.resource.data.createdByName, 1, 100) &&
+        request.resource.data.status in ['active', 'pending'] &&
+        isValidString(request.resource.data.createdAt, 10, 60) &&
+        isOptionalString(request.resource.data, 'updatedAt', 60);
+
+      // Only Admin and the people that connect with each other (connection creator, ideaA owner, ideaB owner) can decline or change status
+      allow update: if isSignedIn() &&
+        (isAdmin() ||
+          isOwner(resource.data.createdBy) ||
+          ('ideaAAuthorId' in resource.data && isOwner(resource.data.ideaAAuthorId)) ||
+          ('ideaBAuthorId' in resource.data && isOwner(resource.data.ideaBAuthorId)) ||
+          isIdeaOwner(resource.data.ideaA) ||
+          isIdeaOwner(resource.data.ideaB)) &&
+        request.resource.data.ideaA == resource.data.ideaA &&
+        request.resource.data.ideaB == resource.data.ideaB &&
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.status in ['active', 'pending', 'declined'] &&
+        isOptionalString(request.resource.data, 'updatedAt', 60);
+
+      // Only Admin and the people that connect with each other (connection creator, ideaA owner, ideaB owner) can remove a connection
+      allow delete: if isAdmin() ||
+        isOwner(resource.data.createdBy) ||
+        ('ideaAAuthorId' in resource.data && isOwner(resource.data.ideaAAuthorId)) ||
+        ('ideaBAuthorId' in resource.data && isOwner(resource.data.ideaBAuthorId)) ||
+        isIdeaOwner(resource.data.ideaA) ||
+        isIdeaOwner(resource.data.ideaB);
+    }
+
+    // ===============================================================
+    // 4. Reports Collection (Admin Only Read/Update, Signed-In Create)
+    // ===============================================================
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+
+      allow create: if isSignedIn() && isNotSuspended() &&
+        request.resource.data.reporterId == request.auth.uid &&
+        request.resource.data.targetType in ['idea', 'response', 'user'] &&
+        isValidString(request.resource.data.targetId, 1, 128) &&
+        isValidString(request.resource.data.targetTitle, 1, 200) &&
+        isOptionalString(request.resource.data, 'category', 40) &&
+        isValidString(request.resource.data.reason, 3, 1000) &&
+        isValidString(request.resource.data.reporterName, 1, 100) &&
+        request.resource.data.status == 'open' &&
+        isValidString(request.resource.data.createdAt, 10, 60);
+
+      allow update, delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // 5. Immutable Security & Admin Audit Logs Collection
+    // ===============================================================
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() &&
+        request.resource.data.actorId == request.auth.uid &&
+        isValidAuditLog(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // ===============================================================
+    // 6. Admins Collection (Locked Exclusively to Sole Platform Owner)
+    // ===============================================================
+    match /admins/{uid} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && request.auth.uid == uid;
+      allow delete: if isAdmin() && uid != request.auth.uid;
+    }
+  }
+}

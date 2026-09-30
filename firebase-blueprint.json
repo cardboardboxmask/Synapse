@@ -1,0 +1,327 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Public profile and metadata for a registered Synapse community member.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID", "maxLength": 128 },
+        "displayName": { "type": "string", "description": "Public display name", "maxLength": 80 },
+        "username": { "type": "string", "description": "Unique lowercase handle slug", "maxLength": 40 },
+        "photoURL": { "type": "string", "description": "Avatar URL", "maxLength": 1000 },
+        "bio": { "type": "string", "description": "Short maker bio", "maxLength": 500 },
+        "deleted": { "type": "boolean", "description": "Soft-deleted account flag" },
+        "suspended": { "type": "boolean", "description": "Admin-suspended account flag" },
+        "suspendedAt": { "type": "string", "format": "date-time", "maxLength": 60 },
+        "suspendedReason": { "type": "string", "maxLength": 500 },
+        "accountStatus": { "type": "string", "enum": ["active", "disabled", "deleted"] },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["uid", "displayName", "username", "createdAt", "updatedAt"]
+    },
+    "UsernameClaim": {
+      "title": "UsernameClaim",
+      "description": "Registry mapping normalized lowercase username to owning user UID.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 40 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["username", "uid", "createdAt", "updatedAt"]
+    },
+    "Idea": {
+      "title": "Idea",
+      "description": "A project specification or idea posted to the Synapse registry.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Concise problem-first title (max 120 chars)", "maxLength": 120 },
+        "summary": { "type": "string", "description": "Short 1-2 sentence pitch", "maxLength": 400 },
+        "problem": { "type": "string", "description": "Detailed problem description", "maxLength": 5000 },
+        "solution": { "type": "string", "description": "Proposed technical or architectural solution", "maxLength": 5000 },
+        "helpWanted": { "type": "string", "description": "Specific builder skills or guidance requested", "maxLength": 3000 },
+        "existingCheckNote": { "type": "string", "description": "Poster notes on existing tools and differences", "maxLength": 2000 },
+        "category": { "type": "string", "enum": ["Software", "Hardware", "AI", "Web", "Other"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "helpTrack": { "type": "string", "enum": ["guidance", "builder"] },
+        "status": { "type": "string", "enum": ["open", "in-progress", "built"] },
+        "license": { "type": "string", "enum": ["all-rights-kept", "cc-by", "mit"] },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 100 },
+        "authorUsername": { "type": "string", "maxLength": 60 },
+        "isSeed": { "type": "boolean" },
+        "responseCount": { "type": "integer" },
+        "volunteerCount": { "type": "integer" },
+        "connectionCount": { "type": "integer" },
+        "communityCheckSimilar": { "type": "integer" },
+        "communityCheckNew": { "type": "integer" },
+        "showcaseUrl": { "type": "string", "maxLength": 500 },
+        "showcaseCredits": { "type": "string", "maxLength": 1000 },
+        "showcaseNotes": { "type": "string", "maxLength": 2000 },
+        "adminVerified": { "type": "boolean", "description": "True if reviewed and verified by an administrator" },
+        "adminVerifiedAt": { "type": "string", "format": "date-time", "maxLength": 60 },
+        "adminVerifiedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": [
+        "title",
+        "summary",
+        "problem",
+        "solution",
+        "helpWanted",
+        "category",
+        "tags",
+        "helpTrack",
+        "status",
+        "license",
+        "authorId",
+        "authorName",
+        "authorUsername",
+        "isSeed",
+        "responseCount",
+        "volunteerCount",
+        "connectionCount",
+        "communityCheckSimilar",
+        "communityCheckNew",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "IdeaRevision": {
+      "title": "IdeaRevision",
+      "description": "Immutable revision log entry for an edited idea specification.",
+      "type": "object",
+      "properties": {
+        "ideaId": { "type": "string", "maxLength": 128 },
+        "editorId": { "type": "string", "maxLength": 128 },
+        "editorName": { "type": "string", "maxLength": 100 },
+        "changedFields": { "type": "array", "items": { "type": "string" } },
+        "previousTitle": { "type": "string", "maxLength": 120 },
+        "previousSummary": { "type": "string", "maxLength": 400 },
+        "previousStatus": { "type": "string", "enum": ["open", "in-progress", "built"] },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["ideaId", "editorId", "editorName", "changedFields", "previousTitle", "previousSummary", "previousStatus", "createdAt"]
+    },
+    "Response": {
+      "title": "Response",
+      "description": "Guidance, offer to build, connection note, or community check posted on an idea.",
+      "type": "object",
+      "properties": {
+        "ideaId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["guidance", "offer-to-build", "connection", "similar-check"] },
+        "content": { "type": "string", "maxLength": 3000 },
+        "referenceUrl": { "type": "string", "maxLength": 500 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorName": { "type": "string", "maxLength": 100 },
+        "authorUsername": { "type": "string", "maxLength": 60 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["ideaId", "type", "content", "authorId", "authorName", "authorUsername", "createdAt", "updatedAt"]
+    },
+    "Volunteer": {
+      "title": "Volunteer",
+      "description": "A user offering to help build or guide an idea.",
+      "type": "object",
+      "properties": {
+        "ideaId": { "type": "string", "maxLength": 128 },
+        "ideaTitle": { "type": "string", "maxLength": 150 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userUsername": { "type": "string", "maxLength": 60 },
+        "role": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["ideaId", "ideaTitle", "userId", "userName", "userUsername", "role", "message", "status", "createdAt", "updatedAt"]
+    },
+    "Connection": {
+      "title": "Connection",
+      "description": "A semantic link between two complementary ideas.",
+      "type": "object",
+      "properties": {
+        "pairKey": { "type": "string", "maxLength": 260 },
+        "ideaA": { "type": "string", "maxLength": 128 },
+        "ideaATitle": { "type": "string", "maxLength": 150 },
+        "ideaB": { "type": "string", "maxLength": 128 },
+        "ideaBTitle": { "type": "string", "maxLength": 150 },
+        "reason": { "type": "string", "maxLength": 1000 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdByName": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["active", "pending", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["ideaA", "ideaATitle", "ideaB", "ideaBTitle", "reason", "createdBy", "createdByName", "status", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Alert for a user about responses, volunteers, connections, or status changes.",
+      "type": "object",
+      "properties": {
+        "recipientId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["response", "volunteer", "connection", "status-change"] },
+        "title": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "link": { "type": "string", "maxLength": 300 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "read": { "type": "boolean" },
+        "actorId": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["recipientId", "type", "title", "message", "link", "read", "actorId", "actorName", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Moderation report submitted by a signed-in user, readable only by admins.",
+      "type": "object",
+      "properties": {
+        "targetType": { "type": "string", "enum": ["idea", "response", "user"] },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "targetTitle": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "enum": ["spam", "abuse", "ip-infringement", "off-topic", "other"] },
+        "reason": { "type": "string", "maxLength": 1000 },
+        "reporterId": { "type": "string", "maxLength": 128 },
+        "reporterName": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["open", "resolved", "dismissed"] },
+        "moderatorId": { "type": "string", "maxLength": 128 },
+        "moderatorName": { "type": "string", "maxLength": 100 },
+        "moderatorAction": { "type": "string", "maxLength": 200 },
+        "resolutionNote": { "type": "string", "maxLength": 1000 },
+        "resolvedAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["targetType", "targetId", "targetTitle", "reason", "reporterId", "reporterName", "status", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable administrative and security audit log entry.",
+      "type": "object",
+      "properties": {
+        "actorId": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 100 },
+        "action": {
+          "type": "string",
+          "enum": [
+            "report.resolve",
+            "report.dismiss",
+            "report.delete",
+            "content.delete_idea",
+            "content.delete_response",
+            "idea.status_change",
+            "idea.verify_change",
+            "volunteer.status_change",
+            "connection.create",
+            "connection.status_change",
+            "connection.delete",
+            "account.delete",
+            "account.username_change",
+            "account.suspend_change",
+            "admin.reauth.success",
+            "admin.reauth.failure",
+            "admin.webauthn.success",
+            "admin.webauthn.failure",
+            "admin.panel.lock",
+            "admin.panel.timeout",
+            "admin.panel.access_denied"
+          ]
+        },
+        "targetType": { "type": "string", "enum": ["idea", "response", "user", "report", "volunteer", "connection", "admin"] },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "summary": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["actorId", "actorName", "action", "targetType", "targetId", "summary", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Manual admin registry entry.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["uid", "role"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "An idea saved by a signed-in user to their profile for quick access.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "ideaId": { "type": "string", "maxLength": 128 },
+        "ideaTitle": { "type": "string", "maxLength": 150 },
+        "ideaSummary": { "type": "string", "maxLength": 400 },
+        "ideaCategory": { "type": "string", "enum": ["Software", "Hardware", "AI", "Web", "Other"] },
+        "ideaHelpTrack": { "type": "string", "enum": ["guidance", "builder"] },
+        "note": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": [
+        "userId",
+        "ideaId",
+        "ideaTitle",
+        "ideaSummary",
+        "ideaCategory",
+        "ideaHelpTrack",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/usernames/{username}": {
+      "schema": { "$ref": "#/entities/UsernameClaim" },
+      "description": "Unique lowercase username claims"
+    },
+    "/users/{uid}/bookmarks/{ideaId}": {
+      "schema": { "$ref": "#/entities/Bookmark" },
+      "description": "User saved idea bookmarks"
+    },
+    "/ideas/{ideaId}": {
+      "schema": { "$ref": "#/entities/Idea" },
+      "description": "Public idea registry"
+    },
+    "/ideas/{ideaId}/revisions/{revisionId}": {
+      "schema": { "$ref": "#/entities/IdeaRevision" },
+      "description": "Idea edit revision history"
+    },
+    "/ideas/{ideaId}/responses/{responseId}": {
+      "schema": { "$ref": "#/entities/Response" },
+      "description": "Responses on an idea"
+    },
+    "/ideas/{ideaId}/volunteers/{volunteerId}": {
+      "schema": { "$ref": "#/entities/Volunteer" },
+      "description": "Volunteers on an idea"
+    },
+    "/connections/{connectionId}": {
+      "schema": { "$ref": "#/entities/Connection" },
+      "description": "Cross-linked ideas"
+    },
+    "/users/{uid}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Private user notifications"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/Report" },
+      "description": "Admin moderation queue"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable security and admin audit trail"
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Admin access control list"
+    }
+  }
+}
