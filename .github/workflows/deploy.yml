@@ -36,9 +36,8 @@ jobs:
         run: npm ci
 
       - name: Build Application for GitHub Pages
-        run: npm run build
+        run: npm run build:gh-pages
         env:
-          VITE_BASE_PATH: /Synapse/
           NODE_ENV: production
 
       - name: Setup Pages
