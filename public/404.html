@@ -11,7 +11,7 @@
       // This script takes the current URL and converts the path and query
       // string into just a query string, then redirects the browser
       // to the new URL with only a query string and hash fragment.
-      var pathSegmentsToKeep = /^\/synapse/i.test(window.location.pathname) ? 1 : 0;
+      var pathSegmentsToKeep = /^\/Synapse/i.test(window.location.pathname) ? 1 : 0;
       var l = window.location;
       l.replace(
         l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
