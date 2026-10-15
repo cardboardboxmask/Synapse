@@ -349,21 +349,15 @@ service cloud.firestore {
       // Anyone can browse public ideas without signing in
       allow read: if true;
 
-      // Signed-in users can create ideas (with counters strictly 0), OR initial 6 founder seed ideas can be bootstrapped once
+      // Signed-in users can create ideas (with counters strictly 0, non-seed only)
       allow create: if isValidIdeaShape(request.resource.data) &&
         countersStartAtZero(request.resource.data) &&
         (isAdmin() || request.resource.data.get('adminVerified', false) == false) &&
-        (
-          (isSignedIn() &&
-            isNotSuspended() &&
-            request.resource.data.authorId == request.auth.uid &&
-            request.resource.data.isSeed == false &&
-            request.resource.data.status == 'open') ||
-          (isSeedIdeaId(ideaId) &&
-            !exists(/databases/$(database)/documents/ideas/$(ideaId)) &&
-            request.resource.data.isSeed == true &&
-            request.resource.data.authorId == 'founder')
-        );
+        isSignedIn() &&
+        isNotSuspended() &&
+        request.resource.data.authorId == request.auth.uid &&
+        request.resource.data.isSeed == false &&
+        request.resource.data.status == 'open';
 
       // Only the idea owner (or admin) can edit their idea or change its status following legal transitions;
       // Only an admin can modify adminVerified status;
@@ -385,8 +379,11 @@ service cloud.firestore {
           (isSignedIn() && isNotSuspended() && isSingleStepCounterTransaction(request.resource.data, resource.data))
         );
 
-      // Only the idea owner or an admin can delete an idea
-      allow delete: if isOwner(resource.data.authorId) || isAdmin();
+      // Only the idea owner or an admin can delete an idea; seed/mock ideas can also be deleted
+      allow delete: if isOwner(resource.data.authorId) ||
+        isAdmin() ||
+        isSeedIdeaId(ideaId) ||
+        resource.data.get('isSeed', false) == true;
 
       // Subcollection: Specification Revisions
       match /revisions/{revisionId} {
@@ -405,7 +402,7 @@ service cloud.firestore {
           isValidString(request.resource.data.createdAt, 10, 60);
 
         allow update: if false;
-        allow delete: if isIdeaOwner(ideaId) || isAdmin();
+        allow delete: if isIdeaOwner(ideaId) || isAdmin() || isSeedIdeaId(ideaId);
       }
 
       // Subcollection: Responses
@@ -434,7 +431,7 @@ service cloud.firestore {
           isValidString(request.resource.data.updatedAt, 10, 60);
 
         // Response author, idea owner (during cascading idea deletion), or admin can delete
-        allow delete: if isOwner(resource.data.authorId) || isIdeaOwner(ideaId) || isAdmin();
+        allow delete: if isOwner(resource.data.authorId) || isIdeaOwner(ideaId) || isAdmin() || isSeedIdeaId(ideaId);
       }
 
       // Subcollection: Volunteers
@@ -473,7 +470,7 @@ service cloud.firestore {
           );
 
         // Volunteer can withdraw their offer, or idea owner/admin can remove
-        allow delete: if isOwner(resource.data.userId) || isIdeaOwner(ideaId) || isAdmin();
+        allow delete: if isOwner(resource.data.userId) || isIdeaOwner(ideaId) || isAdmin() || isSeedIdeaId(ideaId);
       }
     }
 
@@ -515,13 +512,15 @@ service cloud.firestore {
         request.resource.data.status in ['active', 'pending', 'declined'] &&
         isOptionalString(request.resource.data, 'updatedAt', 60);
 
-      // Only Admin and the people that connect with each other (connection creator, ideaA owner, ideaB owner) can remove a connection
+      // Only Admin and the people that connect with each other (connection creator, ideaA owner, ideaB owner) can remove a connection; seed links can also be removed
       allow delete: if isAdmin() ||
         isOwner(resource.data.createdBy) ||
         ('ideaAAuthorId' in resource.data && isOwner(resource.data.ideaAAuthorId)) ||
         ('ideaBAuthorId' in resource.data && isOwner(resource.data.ideaBAuthorId)) ||
         isIdeaOwner(resource.data.ideaA) ||
-        isIdeaOwner(resource.data.ideaB);
+        isIdeaOwner(resource.data.ideaB) ||
+        isSeedIdeaId(resource.data.ideaA) ||
+        isSeedIdeaId(resource.data.ideaB);
     }
 
     // ===============================================================

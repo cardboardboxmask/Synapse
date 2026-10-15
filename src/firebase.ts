@@ -28,10 +28,9 @@ import {
   limit,
   onSnapshot,
   runTransaction,
-  getDocFromServer,
+  getDocsFromServer,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { SEED_IDEAS } from './data/seedIdeas';
 import {
   AuditActionType,
   AuditLogEntry,
@@ -151,7 +150,8 @@ async function executeTransactionWithRetry<T>(
 // Validate connection on boot
 async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'ideas', 'seed-localmesh'));
+    const q = query(collection(db, 'ideas'), limit(1));
+    await getDocsFromServer(q);
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error('Please check your Firebase configuration.');
@@ -203,7 +203,6 @@ async function sendDeduplicatedNotification(params: {
 }): Promise<void> {
   if (
     !params.recipientId ||
-    params.recipientId === 'founder' ||
     params.recipientId === params.actorId
   ) {
     return;
@@ -243,24 +242,6 @@ async function sendDeduplicatedNotification(params: {
     });
   } catch (notifErr) {
     console.warn('Notification non-fatal notice:', notifErr);
-  }
-}
-
-/**
- * Seeds the 6 founder starter ideas if they do not exist in Firestore yet.
- */
-export async function seedStarterIdeasIfNeeded(): Promise<void> {
-  for (const seed of SEED_IDEAS) {
-    const ref = doc(db, 'ideas', seed.id);
-    try {
-      const snap = await getDoc(ref);
-      if (!snap.exists()) {
-        const { id: _id, ...payload } = seed;
-        await setDoc(ref, payload);
-      }
-    } catch (err) {
-      console.warn('Seed check notice:', err);
-    }
   }
 }
 
@@ -2064,5 +2045,307 @@ export async function reauthenticateAdminWithPassword(passwordInput: string): Pr
     throw new Error('Verification failed. Please authenticate again.');
   }
 }
+
+/**
+ * Seeds 12 realistic ideas into Firestore if fewer than 12 ideas exist,
+ * ensuring variety across categories, tracks, and tags.
+ */
+export async function seedInitialIdeasIfNeeded(): Promise<void> {
+  try {
+    const ideasRef = collection(db, 'ideas');
+    const snapshot = await getDocs(ideasRef);
+    if (snapshot.size >= 12) {
+      return;
+    }
+
+    const now = Date.now();
+    const seedIdeas = [
+      {
+        title: 'Bus arrival tracker for small-town routes',
+        summary: 'Students in tier-2 cities wait at stops with no idea when the bus will arrive, because big transit apps don’t cover local buses.',
+        problem: 'Students in tier-2 cities wait at stops with no idea when the bus will arrive, because big transit apps don’t cover local buses.',
+        solution: 'A crowd-sourced web app where daily commuters tap "bus spotted here" to share live GPS coordinates and arrival estimates for local bus routes.',
+        helpWanted: 'A builder for a simple crowd-sourced “bus spotted here” web app and real-time map feed.',
+        helpTrack: 'builder' as const,
+        category: 'Web' as const,
+        license: 'cc-by' as const,
+        tags: ['transport', 'students', 'crowdsourced'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 4 * 86400000).toISOString(),
+        updatedAt: new Date(now - 4 * 86400000).toISOString(),
+      },
+      {
+        title: 'Exam timetable and syllabus tracker for college students',
+        summary: 'Students juggle unit-wise syllabus, internals, and arrears subjects across scattered notes and WhatsApp groups.',
+        problem: 'Students juggle unit-wise syllabus, internals, and arrears subjects across scattered notes and WhatsApp groups.',
+        solution: 'A centralized dashboard for college students to track unit-wise syllabus completion, upcoming internals, and exam schedules.',
+        helpWanted: 'Feedback on what a student would actually use daily, and a builder for the first version.',
+        helpTrack: 'guidance' as const,
+        category: 'Web' as const,
+        license: 'mit' as const,
+        tags: ['education', 'students', 'productivity'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'in-progress' as const,
+        createdAt: new Date(now - 3.5 * 86400000).toISOString(),
+        updatedAt: new Date(now - 3.5 * 86400000).toISOString(),
+      },
+      {
+        title: 'Offline-first note sharing for areas with poor internet',
+        summary: 'Students in low-connectivity areas can’t reliably download study material shared online.',
+        problem: 'Students in low-connectivity areas can’t reliably download study material shared online.',
+        solution: 'A progressive web app (PWA) with local caching and peer-to-peer sync over Wi-Fi direct or Bluetooth mesh for sharing study notes.',
+        helpWanted: 'Guidance on how to make a web app work offline (PWA caching, service workers, sync).',
+        helpTrack: 'guidance' as const,
+        category: 'Software' as const,
+        license: 'mit' as const,
+        tags: ['offline', 'pwa', 'education'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 3 * 86400000).toISOString(),
+        updatedAt: new Date(now - 3 * 86400000).toISOString(),
+      },
+      {
+        title: 'Low-cost soil moisture alert for small farmers',
+        summary: 'Small farmers overwater or underwater crops because they can’t measure soil moisture cheaply.',
+        problem: 'Small farmers overwater or underwater crops because they can’t measure soil moisture cheaply.',
+        solution: 'An Arduino/ESP32 based soil moisture sensor probe connected to a solar-powered GSM module that sends SMS alerts when irrigation is needed.',
+        helpWanted: 'A hardware builder (sensor + SMS or buzzer alert) and an advisor with farming experience.',
+        helpTrack: 'builder' as const,
+        category: 'Hardware' as const,
+        license: 'cc-by' as const,
+        tags: ['agriculture', 'sensors', 'lowcost'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'in-progress' as const,
+        createdAt: new Date(now - 2.5 * 86400000).toISOString(),
+        updatedAt: new Date(now - 2.5 * 86400000).toISOString(),
+      },
+      {
+        title: 'Local volunteer matching for blood donation',
+        summary: 'In emergencies, families spend hours phoning around to find a matching blood donor nearby.',
+        problem: 'In emergencies, families spend hours phoning around to find a matching blood donor nearby.',
+        solution: 'A privacy-first emergency blood donor directory that matches blood group and location securely without exposing phone numbers publicly.',
+        helpWanted: 'Advice on privacy and verification, plus a builder for a simple donor registry.',
+        helpTrack: 'guidance' as const,
+        category: 'Web' as const,
+        license: 'all-rights-kept' as const,
+        tags: ['health', 'community', 'emergency'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 2 * 86400000).toISOString(),
+        updatedAt: new Date(now - 2 * 86400000).toISOString(),
+      },
+      {
+        title: 'Plain-language summary tool for government forms and notices',
+        summary: 'Many people can’t understand official notices, scheme forms, or legal letters, and don’t know what to do next.',
+        problem: 'Many people can’t understand official notices, scheme forms, or legal letters, and don’t know what to do next.',
+        solution: 'An AI-powered document simplifier that translates complex government scheme circulars into simple, actionable steps in local languages.',
+        helpWanted: 'An AI/NLP builder, and people who can check accuracy in Tamil and English.',
+        helpTrack: 'builder' as const,
+        category: 'AI' as const,
+        license: 'mit' as const,
+        tags: ['accessibility', 'language', 'civic'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'built' as const,
+        createdAt: new Date(now - 1.5 * 86400000).toISOString(),
+        updatedAt: new Date(now - 1.5 * 86400000).toISOString(),
+      },
+      {
+        title: 'Shared tool library for a neighborhood',
+        summary: 'People buy drills, ladders, and other tools they use once, while neighbors own the same things sitting idle.',
+        problem: 'People buy drills, ladders, and other tools they use once, while neighbors own the same things sitting idle.',
+        solution: 'A hyper-local inventory board where residents list household tools available for lending or borrowing within 1 km.',
+        helpWanted: 'A builder for a simple lend/borrow board with item status and ratings.',
+        helpTrack: 'builder' as const,
+        category: 'Web' as const,
+        license: 'cc-by' as const,
+        tags: ['sharing', 'community', 'sustainability'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 1 * 86400000).toISOString(),
+        updatedAt: new Date(now - 1 * 86400000).toISOString(),
+      },
+      {
+        title: 'Study group finder by subject and time',
+        summary: 'Students want to study with others on the same subject but only know people in their own class.',
+        problem: 'Students want to study with others on the same subject but only know people in their own class.',
+        solution: 'A scheduling widget where students input their course codes and free study windows to automatically form virtual or library study pods.',
+        helpWanted: 'Feedback on matching logic, and one builder for a prototype.',
+        helpTrack: 'guidance' as const,
+        category: 'Software' as const,
+        license: 'mit' as const,
+        tags: ['students', 'collaboration'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 0.8 * 86400000).toISOString(),
+        updatedAt: new Date(now - 0.8 * 86400000).toISOString(),
+      },
+      {
+        title: 'Low-cost air quality monitor for classrooms',
+        summary: 'Schools have no cheap way to measure air quality (CO2, dust), so poor ventilation goes unnoticed.',
+        problem: 'Schools have no cheap way to measure air quality (CO2, dust), so poor ventilation goes unnoticed.',
+        solution: 'An open-source ESP32 air quality monitor with an e-ink display showing CO2 levels and ventilation reminders for teachers.',
+        helpWanted: 'Advice on sensors (NDIR CO2) and calibration from anyone with electronics experience.',
+        helpTrack: 'guidance' as const,
+        category: 'Hardware' as const,
+        license: 'cc-by' as const,
+        tags: ['esp32', 'sensors', 'education'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'in-progress' as const,
+        createdAt: new Date(now - 0.6 * 86400000).toISOString(),
+        updatedAt: new Date(now - 0.6 * 86400000).toISOString(),
+      },
+      {
+        title: 'Voice-based reminders for elderly family members',
+        summary: 'Older people forget medicines and appointments, and smartphone reminders are too fiddly for them.',
+        problem: 'Older people forget medicines and appointments, and smartphone reminders are too fiddly for them.',
+        solution: 'A simple voice-first reminder interface that speaks reminders aloud in regional languages and confirms completion with a single physical button press.',
+        helpWanted: 'A builder for a very simple voice reminder device or app, plus UX advice from anyone who has helped elderly relatives with technology.',
+        helpTrack: 'builder' as const,
+        category: 'AI' as const,
+        license: 'mit' as const,
+        tags: ['elderly', 'voice', 'accessibility'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 0.4 * 86400000).toISOString(),
+        updatedAt: new Date(now - 0.4 * 86400000).toISOString(),
+      },
+      {
+        title: 'Beginner project ideas board for first-year engineering students',
+        summary: 'First-years want to build things but don’t know what’s realistic for their skill level.',
+        problem: 'First-years want to build things but don’t know what’s realistic for their skill level.',
+        solution: 'A curated repository of scoped engineering projects categorized by difficulty, required tools, and estimated completion time.',
+        helpWanted: 'Seniors who can suggest scoped projects, and a builder for a small curated list site.',
+        helpTrack: 'guidance' as const,
+        category: 'Other' as const,
+        license: 'mit' as const,
+        tags: ['beginners', 'students', 'learning'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 0.25 * 86400000).toISOString(),
+        updatedAt: new Date(now - 0.25 * 86400000).toISOString(),
+      },
+      {
+        title: 'Receipt and warranty organizer',
+        summary: 'People lose bills and warranty cards, then can’t claim repairs when something breaks.',
+        problem: 'People lose bills and warranty cards, then can’t claim repairs when something breaks.',
+        solution: 'A lightweight mobile-first web app that snaps a photo of purchase receipts, extracts expiry dates with OCR, and sends push reminders before warranties expire.',
+        helpWanted: 'A builder for a simple app that stores a photo, purchase date, and warranty reminder.',
+        helpTrack: 'builder' as const,
+        category: 'Software' as const,
+        license: 'cc-by' as const,
+        tags: ['utility', 'reminders'],
+        authorId: SOLE_ADMIN_UID,
+        authorUid: SOLE_ADMIN_UID,
+        authorUsername: 'admin',
+        authorName: 'Admin',
+        authorDisplayName: 'Admin',
+        adminVerified: true,
+        volunteerCount: 0,
+        connectionCount: 0,
+        responseCount: 0,
+        status: 'open' as const,
+        createdAt: new Date(now - 0.1 * 86400000).toISOString(),
+        updatedAt: new Date(now - 0.1 * 86400000).toISOString(),
+      },
+    ];
+
+    for (const item of seedIdeas) {
+      const docRef = doc(collection(db, 'ideas'));
+      await setDoc(docRef, item);
+    }
+  } catch (err) {
+    console.warn('Seeding ideas error:', err);
+  }
+}
+
 
 

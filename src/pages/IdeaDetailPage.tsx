@@ -22,6 +22,7 @@ import {
   updateVolunteerStatusByOwner,
   volunteerForIdeaWithTransaction,
   withdrawVolunteerWithTransaction,
+  SOLE_ADMIN_UID,
 } from '../firebase';
 import { useApp } from '../context/AppContext';
 import { BookmarkButton } from '../components/BookmarkButton';
@@ -84,6 +85,12 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
   const [selectedConnectIdeaId, setSelectedConnectIdeaId] = useState('');
   const [connectReason, setConnectReason] = useState('');
   const [connectSubmitting, setConnectSubmitting] = useState(false);
+  const [justPostedDismissed, setJustPostedDismissed] = useState(false);
+
+  const isJustPosted = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('justPosted') === '1' || params.get('created') === 'true';
+  }, [location.search]);
 
   // Community Check ("Does this already exist?") State
   const [showSimilarForm, setShowSimilarForm] = useState(false);
@@ -236,7 +243,16 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
     );
   }
 
-  const isOwner = Boolean(user && user.uid === idea.authorId);
+  const isOwner = Boolean(
+    user &&
+      (user.uid === idea.authorId ||
+        user.uid === idea.authorUid ||
+        (isAdmin &&
+          (idea.authorId === SOLE_ADMIN_UID ||
+            idea.authorUid === SOLE_ADMIN_UID ||
+            idea.authorUsername === 'admin' ||
+            idea.authorUsername === 'cardboardboxmask')))
+  );
   const licenseInfo = getLicenseLabel(idea.license);
   const permalinkUrl = `${window.location.origin}/ideas/${idea.id}`;
 
@@ -327,7 +343,7 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
       });
       setConnectReason('');
       setShowConnectModal(false);
-      showToast('Ideas linked on the Constellation Graph!', 'success');
+      showToast('Ideas connected!', 'success');
     } catch {
       showToast('Could not link ideas.', 'error');
     } finally {
@@ -585,6 +601,54 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
         description={idea.summary}
       />
 
+      {/* Just-Posted Share Celebration Banner */}
+      {isJustPosted && !justPostedDismissed && (
+        <section
+          aria-label="Idea publication confirmation"
+          className="p-space-lg rounded-2xl bg-secondary/15 border-2 border-secondary/40 flex flex-col md:flex-row md:items-center justify-between gap-space-md shadow-lg animate-fade-in"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[24px]">verified</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                🎉 Your idea is live on Synapse!
+              </h2>
+              <p className="font-body-md text-body-md text-on-surface-variant">
+                Your specification is published to the public registry. Share this direct link with collaborators, co-founders, and builders.
+              </p>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <input
+                  type="text"
+                  readOnly
+                  aria-label="Direct shareable link to this idea"
+                  value={permalinkUrl}
+                  className="h-10 px-3 rounded-lg bg-surface-container-high text-on-surface font-code-sm text-code-sm border border-outline-variant/30 w-72 sm:w-96 select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={copyPermalink}
+                  className="min-h-[40px] px-4 rounded-lg bg-secondary text-on-secondary font-title-md text-title-md font-semibold hover:opacity-95 transition-opacity flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                  Copy Share Link
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+            <button
+              type="button"
+              onClick={() => setJustPostedDismissed(true)}
+              className="min-h-[40px] px-3 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md"
+            >
+              Dismiss
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Top Meta Hierarchy: Breadcrumbs & Badges */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
         <nav
@@ -654,12 +718,6 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
               </span>
               <span>{idea.adminVerified ? 'Admin Verified ✓ (Revoke)' : 'Grant Admin Verified'}</span>
             </button>
-          )}
-          {idea.isSeed && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high text-primary font-label-sm text-label-sm uppercase tracking-wider">
-              <span className="material-symbols-outlined text-[14px]">volunteer_activism</span>
-              Starter idea from the founder
-            </span>
           )}
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high text-secondary font-label-sm text-label-sm uppercase tracking-wider">
             <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
@@ -981,210 +1039,6 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
                 <p className="font-body-lg text-body-lg text-on-surface leading-relaxed whitespace-pre-line">
                   {idea.solution}
                 </p>
-
-                {/* Visual Topology Diagram & Hotlinked Hardware Photos for LocalMesh */}
-                {idea.id === 'seed-localmesh' && (
-                  <>
-                    <div className="w-full bg-surface-container-lowest rounded-xl p-space-lg flex flex-col gap-space-md">
-                      <div className="flex items-center justify-between text-on-surface-variant font-code-sm text-code-sm">
-                        <span>PHYSICAL TOPOLOGY &amp; SENSOR RELAY</span>
-                        <span className="text-secondary font-medium">
-                          915MHz / 868MHz Free ISM Band
-                        </span>
-                      </div>
-                      <div className="w-full h-48 bg-surface-container-low rounded-lg p-space-sm flex items-center justify-center relative overflow-hidden">
-                        <svg
-                          className="w-full h-full"
-                          viewBox="0 0 600 180"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <line
-                            x1="0"
-                            y1="45"
-                            x2="600"
-                            y2="45"
-                            stroke="#31353f"
-                            strokeWidth="0.75"
-                            strokeDasharray="3 3"
-                          />
-                          <line
-                            x1="0"
-                            y1="90"
-                            x2="600"
-                            y2="90"
-                            stroke="#31353f"
-                            strokeWidth="0.75"
-                            strokeDasharray="3 3"
-                          />
-                          <line
-                            x1="0"
-                            y1="135"
-                            x2="600"
-                            y2="135"
-                            stroke="#31353f"
-                            strokeWidth="0.75"
-                            strokeDasharray="3 3"
-                          />
-                          <path
-                            d="M 80 90 L 220 50"
-                            stroke="#44e2cd"
-                            strokeWidth="2"
-                            strokeDasharray="4 4"
-                          />
-                          <path d="M 80 90 L 220 130" stroke="#44e2cd" strokeWidth="2" />
-                          <path d="M 220 50 L 380 90" stroke="#44e2cd" strokeWidth="2" />
-                          <path
-                            d="M 220 130 L 380 90"
-                            stroke="#44e2cd"
-                            strokeWidth="2"
-                            strokeDasharray="4 4"
-                          />
-                          <path d="M 380 90 L 520 90" stroke="#f5a524" strokeWidth="2.5" />
-                          <circle
-                            cx="80"
-                            cy="90"
-                            r="14"
-                            fill="#181c25"
-                            stroke="#44e2cd"
-                            strokeWidth="3"
-                          />
-                          <circle cx="80" cy="90" r="5" fill="#44e2cd" />
-                          <text
-                            x="80"
-                            y="125"
-                            textAnchor="middle"
-                            fill="#dfe2ef"
-                            fontFamily="Space Grotesk"
-                            fontSize="11"
-                          >
-                            Community Center (Root)
-                          </text>
-                          <circle
-                            cx="220"
-                            cy="50"
-                            r="11"
-                            fill="#181c25"
-                            stroke="#44e2cd"
-                            strokeWidth="2"
-                          />
-                          <circle cx="220" cy="50" r="4" fill="#44e2cd" />
-                          <text
-                            x="220"
-                            y="32"
-                            textAnchor="middle"
-                            fill="#d7c3ae"
-                            fontFamily="Space Grotesk"
-                            fontSize="10"
-                          >
-                            Water Depth Node #1
-                          </text>
-                          <circle
-                            cx="220"
-                            cy="130"
-                            r="11"
-                            fill="#181c25"
-                            stroke="#44e2cd"
-                            strokeWidth="2"
-                          />
-                          <circle cx="220" cy="130" r="4" fill="#44e2cd" />
-                          <text
-                            x="220"
-                            y="160"
-                            textAnchor="middle"
-                            fill="#d7c3ae"
-                            fontFamily="Space Grotesk"
-                            fontSize="10"
-                          >
-                            Solar Beacon #2
-                          </text>
-                          <circle
-                            cx="380"
-                            cy="90"
-                            r="11"
-                            fill="#181c25"
-                            stroke="#44e2cd"
-                            strokeWidth="2"
-                          />
-                          <circle cx="380" cy="90" r="4" fill="#44e2cd" />
-                          <text
-                            x="380"
-                            y="120"
-                            textAnchor="middle"
-                            fill="#d7c3ae"
-                            fontFamily="Space Grotesk"
-                            fontSize="10"
-                          >
-                            Storefront Relay #3
-                          </text>
-                          <circle
-                            cx="520"
-                            cy="90"
-                            r="15"
-                            fill="#181c25"
-                            stroke="#f5a524"
-                            strokeWidth="3"
-                          />
-                          <circle cx="520" cy="90" r="5" fill="#f5a524" />
-                          <text
-                            x="520"
-                            y="125"
-                            textAnchor="middle"
-                            fill="#f5a524"
-                            fontFamily="Space Grotesk"
-                            fontSize="11"
-                            fontWeight="600"
-                          >
-                            Citizen Phone WiFi AP
-                          </text>
-                        </svg>
-                      </div>
-                      <div className="grid grid-cols-3 gap-space-sm pt-space-xs text-center font-code-sm text-code-sm">
-                        <div className="bg-surface-container p-space-sm rounded">
-                          <span className="text-on-surface-variant block">Mesh Hop Range</span>
-                          <span className="text-on-surface font-semibold text-title-md">
-                            1.2 - 5.0 km
-                          </span>
-                        </div>
-                        <div className="bg-surface-container p-space-sm rounded">
-                          <span className="text-on-surface-variant block">Power Consumption</span>
-                          <span className="text-on-surface font-semibold text-title-md">
-                            &lt; 18uA Deep Sleep
-                          </span>
-                        </div>
-                        <div className="bg-surface-container p-space-sm rounded">
-                          <span className="text-on-surface-variant block">Target BOM Cost</span>
-                          <span className="text-primary font-semibold text-title-md">
-                            ~$14.50 USD
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
-                      <div className="rounded-xl overflow-hidden bg-surface-container-lowest">
-                        <img
-                          src={SITE_CONFIG.images.localMeshBreadboard}
-                          alt="ESP32 + SX1262 LoRa breadboard verification bench"
-                          className="w-full h-44 object-cover"
-                        />
-                        <div className="p-3 bg-surface-container-high font-code-sm text-code-sm text-on-surface-variant">
-                          ESP32 + SX1262 LoRa breadboard verification bench
-                        </div>
-                      </div>
-                      <div className="rounded-xl overflow-hidden bg-surface-container-lowest">
-                        <img
-                          src={SITE_CONFIG.images.localMeshEnclosure}
-                          alt="Field test enclosure with 1W mono solar panel"
-                          className="w-full h-44 object-cover"
-                        />
-                        <div className="p-3 bg-surface-container-high font-code-sm text-code-sm text-on-surface-variant">
-                          Field test enclosure with 1W mono solar panel
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
               </section>
 
               {/* HELP WANTED / BUILDER PROFILE */}
@@ -1798,10 +1652,10 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
               <div className="bg-surface-container rounded-2xl p-space-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md">
                 <div>
                   <h2 className="font-headline-sm text-headline-sm text-on-surface">
-                    Connected Ideas ({ideaConnections.length})
+                    Connected Ideas {ideaConnections.length > 0 && `(${ideaConnections.length})`}
                   </h2>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Complementary specs linked by makers in the Synapse Constellation.
+                  <p className="font-body-sm text-[13px] text-on-surface-variant">
+                    Related ideas connected by community members.
                   </p>
                 </div>
                 <button
@@ -1809,10 +1663,10 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
                   onClick={() => {
                     if (requireAuth()) setShowConnectModal(true);
                   }}
-                  className="min-h-[44px] px-5 rounded-lg bg-secondary text-on-secondary font-title-md text-title-md inline-flex items-center gap-2 shrink-0"
+                  className="min-h-[44px] px-5 rounded-lg bg-secondary text-on-secondary font-title-md text-title-md inline-flex items-center gap-2 shrink-0 font-medium"
                 >
                   <span className="material-symbols-outlined text-[18px]">hub</span>
-                  This connects with my idea
+                  Connect an idea
                 </button>
               </div>
 
@@ -1820,11 +1674,10 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
                 <div className="bg-surface-container-low rounded-2xl p-12 text-center flex flex-col items-center gap-space-md">
                   <span className="material-symbols-outlined text-[36px] text-secondary">hub</span>
                   <h3 className="font-headline-sm text-headline-sm text-on-surface">
-                    0 connected ideas yet
+                    No connected ideas yet
                   </h3>
                   <p className="font-body-md text-body-md text-on-surface-variant max-w-md">
-                    Have a complementary specification or shared protocol? Link your idea to build
-                    the Constellation graph.
+                    Have a related idea? Connect your idea to show how they fit together on the Idea Map.
                   </p>
                   <button
                     type="button"
@@ -2235,12 +2088,19 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
                 {idea.authorUsername.slice(0, 1).toUpperCase()}
               </div>
               <div className="flex flex-col min-w-0">
-                <Link
-                  to={`/u/${idea.authorUsername}`}
-                  className="font-headline-sm text-headline-sm text-on-surface hover:text-primary truncate transition-colors"
-                >
-                  @{idea.authorUsername}
-                </Link>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Link
+                    to={`/u/${idea.authorUsername}`}
+                    className="font-headline-sm text-headline-sm text-on-surface hover:text-primary truncate transition-colors"
+                  >
+                    @{idea.authorUsername}
+                  </Link>
+                  {(idea.authorUsername === 'admin' || idea.authorUsername === 'cardboardboxmask') && (
+                    <span className="px-2 py-0.5 rounded text-[11px] bg-primary/10 text-primary font-bold uppercase tracking-wider">
+                      Platform Admin
+                    </span>
+                  )}
+                </div>
                 <span className="font-code-sm text-code-sm text-on-surface-variant">
                   {idea.authorName}
                 </span>
@@ -2328,25 +2188,26 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
               </div>
               <Link
                 to="/connections"
-                className="font-code-sm text-code-sm text-secondary hover:underline"
+                title="See how related ideas connect"
+                className="font-code-sm text-[13px] text-secondary hover:underline"
               >
-                Graph View →
+                Idea Map →
               </Link>
             </div>
 
             {ideaConnections.length === 0 ? (
               <div className="p-space-md rounded-xl bg-surface-container-low text-center flex flex-col gap-2">
-                <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  No linked ideas yet. Connect a complementary spec to cross-pollinate.
+                <p className="font-body-sm text-[13px] text-on-surface-variant">
+                  No connected ideas yet. Connect a related idea to show how they fit together.
                 </p>
                 <button
                   type="button"
                   onClick={() => {
                     if (requireAuth()) setShowConnectModal(true);
                   }}
-                  className="min-h-[40px] px-3 rounded-lg bg-surface-container-high text-secondary font-code-sm text-code-sm hover:bg-surface-bright"
+                  className="min-h-[40px] px-3 rounded-lg bg-surface-container-high text-secondary font-code-sm text-[13px] hover:bg-surface-bright"
                 >
-                  + Link an idea
+                  + Connect an idea
                 </button>
               </div>
             ) : (
@@ -2513,9 +2374,8 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
               </button>
             </div>
 
-            <p className="font-body-md text-body-md text-on-surface-variant">
-              Linking ideas allows builders to share schematics, protocol benchmarks, and modular
-              code across the Constellation Map.
+            <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+              Connecting ideas helps people discover related work, share ideas, and build together on the Idea Map.
             </p>
 
             <form onSubmit={handleSubmitConnection} className="flex flex-col gap-space-md">
@@ -2539,7 +2399,7 @@ export const IdeaDetailPage: React.FC<IdeaDetailPageProps> = ({ tab }) => {
                       ))}
                     </optgroup>
                   )}
-                  <optgroup label="Community & Starter Ideas">
+                  <optgroup label="Community Ideas">
                     {otherAvailableIdeas
                       .filter((o) => !myOwnIdeas.some((m) => m.id === o.id))
                       .map((other) => (

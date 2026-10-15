@@ -726,9 +726,10 @@ export const AdminReportsPage: React.FC = () => {
                 </button>
                 <Link
                   to="/connections"
-                  className="min-h-[44px] px-3 rounded-lg bg-surface-container-high text-on-surface font-code-sm text-code-sm inline-flex items-center"
+                  title="See how related ideas connect"
+                  className="min-h-[44px] px-3 rounded-lg bg-surface-container-high text-on-surface font-code-sm text-[13px] inline-flex items-center"
                 >
-                  Constellation Map
+                  Idea Map
                 </Link>
               </div>
             </div>

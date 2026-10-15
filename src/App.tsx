@@ -4,7 +4,7 @@
  */
 
 import React, { Suspense, useEffect } from 'react';
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AdminRouteGuard } from './components/AdminRouteGuard';
 import { Layout } from './components/Layout';
@@ -49,6 +49,9 @@ const AdminReportsPage = React.lazy(() =>
 );
 const NotFoundPage = React.lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
+);
+const LegalPage = React.lazy(() =>
+  import('./pages/LegalPage').then((m) => ({ default: m.LegalPage }))
 );
 
 function ScrollManager() {
@@ -131,14 +134,19 @@ export default function App() {
                   element={<IdeaDetailPage tab="connections" />}
                 />
                 <Route path="/ideas/:id/edit" element={<IdeaDetailPage tab="edit" />} />
+                <Route path="/post" element={<Navigate to="/post/basics" replace />} />
                 <Route path="/post/basics" element={<PostWizardPage step={1} />} />
                 <Route path="/post/details" element={<PostWizardPage step={2} />} />
-                <Route path="/post/review" element={<PostWizardPage step={3} />} />
+                <Route path="/post/collaborate" element={<PostWizardPage step={3} />} />
+                <Route path="/post/review" element={<PostWizardPage step={4} />} />
                 <Route path="/connections" element={<ConnectionsPage />} />
                 <Route path="/showcase" element={<ShowcasePage />} />
                 <Route path="/showcase/:id" element={<ShowcasePage />} />
-                <Route path="/about" element={<AboutSupportPage mode="about" />} />
-                <Route path="/support" element={<AboutSupportPage mode="support" />} />
+                <Route path="/about" element={<AboutSupportPage />} />
+                <Route path="/support" element={<Navigate to="/about" replace />} />
+                <Route path="/terms" element={<LegalPage type="terms" />} />
+                <Route path="/privacy" element={<LegalPage type="privacy" />} />
+                <Route path="/sitemap" element={<Navigate to="/explore" replace />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/u/:username" element={<PublicUserProfilePage />} />

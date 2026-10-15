@@ -3,18 +3,31 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { BookmarkButton } from '../components/BookmarkButton';
 import { PageMeta } from '../components/PageMeta';
-import { updateIdeaDetails } from '../firebase';
+import { updateIdeaDetails, SOLE_ADMIN_UID } from '../firebase';
 import { formatRelativeTime } from '../utils/sanitize';
 
 export const ShowcasePage: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
-  const { user, ideas, showToast } = useApp();
+  const { user, ideas, showToast, isAdmin } = useApp();
   const navigate = useNavigate();
 
   const builtIdeas = useMemo(() => ideas.filter((i) => i.status === 'built'), [ideas]);
   const myOpenIdeas = useMemo(
-    () => (user ? ideas.filter((i) => i.authorId === user.uid && i.status !== 'built') : []),
-    [ideas, user]
+    () =>
+      user
+        ? ideas.filter(
+            (i) =>
+              (i.authorId === user.uid ||
+                i.authorUid === user.uid ||
+                (isAdmin &&
+                  (i.authorId === SOLE_ADMIN_UID ||
+                    i.authorUid === SOLE_ADMIN_UID ||
+                    i.authorUsername === 'admin' ||
+                    i.authorUsername === 'cardboardboxmask'))) &&
+              i.status !== 'built'
+          )
+        : [],
+    [ideas, user, isAdmin]
   );
 
   const [showMarkBuiltModal, setShowMarkBuiltModal] = useState(false);
@@ -170,11 +183,10 @@ export const ShowcasePage: React.FC = () => {
             <span className="material-symbols-outlined text-[32px]">rocket_launch</span>
           </div>
           <h2 className="font-headline-md text-headline-md text-on-surface">
-            0 ideas marked Built yet
+            No ideas marked Built yet
           </h2>
-          <p className="font-body-md text-body-md text-on-surface-variant max-w-md">
-            We show honest counts starting at 0. Browse open specifications that need a builder, or
-            mark one of your own ideas as Built once a prototype ships!
+          <p className="font-body-md text-body-md text-on-surface-variant max-w-md leading-relaxed">
+            Browse ideas that need a builder, or mark one of your own ideas as Built once a prototype ships!
           </p>
           <div className="flex flex-wrap justify-center gap-space-md">
             <Link

@@ -10,6 +10,17 @@ import {
 } from '../firebase';
 import { AuditLogEntry, IdeaConnection } from '../types/synapse';
 import { checkRateLimit, formatRelativeTime } from '../utils/sanitize';
+import { BookmarkButton } from '../components/BookmarkButton';
+import {
+  Link2,
+  Network,
+  History,
+  Shield,
+  User,
+  Lock,
+  ArrowRight,
+  X,
+} from 'lucide-react';
 
 export const ConnectionsPage: React.FC = () => {
   const { user, profile, isAdmin, ideas, connections, showToast, openConfirm } = useApp();
@@ -195,7 +206,7 @@ export const ConnectionsPage: React.FC = () => {
       });
       setReason('');
       setShowLinkModal(false);
-      showToast('Connection added to the Constellation Graph!', 'success');
+      showToast('Connection added to the Idea Map!', 'success');
     } catch {
       showToast('Could not create connection.', 'error');
     } finally {
@@ -237,23 +248,22 @@ export const ConnectionsPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-margin py-space-xl flex flex-col gap-space-xl">
       <PageMeta
-        title="Constellation Connections & Graph — Synapse"
-        description="Explore cross-linked ideas in list view and on the interactive 2D Constellation Map."
+        title="Connections — Synapse"
+        description="See how related ideas connect in list view and on the interactive Idea Map."
       />
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary/10 text-secondary font-code-sm text-code-sm mb-space-xs uppercase">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary/10 text-secondary font-code-sm text-[13px] mb-space-xs">
             <span className="w-2 h-2 rounded-full bg-secondary" />
-            Cross-Pollination Protocol
+            Connections
           </div>
           <h1 className="font-headline-lg text-headline-lg-mobile sm:text-headline-lg text-on-surface">
-            Idea Connections &amp; Constellation Map
+            Connections
           </h1>
-          <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl mt-1">
-            Browse semantic links between complementary specs first in structured list view, or
-            navigate spatially across the 2D Constellation Map below.
+          <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl mt-1 leading-relaxed">
+            See how related ideas connect, browse shared goals, or navigate the visual Idea Map below.
           </p>
         </div>
 
@@ -262,72 +272,68 @@ export const ConnectionsPage: React.FC = () => {
           onClick={handleOpenLinkFlow}
           className="min-h-[48px] px-space-xl rounded-lg bg-secondary text-on-secondary font-title-md text-title-md font-semibold inline-flex items-center gap-2 shadow-md hover:opacity-95 transition-opacity self-start md:self-auto"
         >
-          <span className="material-symbols-outlined text-[20px]">add_link</span>
+          <Link2 className="w-5 h-5" />
           <span>Link your idea</span>
         </button>
       </div>
 
-      {/* Tab Navigation: Connections View vs Admin Activity Log */}
-      <div className="flex items-center justify-between border-b border-surface-variant/40 gap-4 flex-wrap">
-        <div className="flex items-center gap-2" role="tablist" aria-label="Connections Page Tabs">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'connections'}
-            onClick={() => setActiveTab('connections')}
-            className={`min-h-[44px] px-4 py-2 font-title-md text-title-md border-b-2 transition-colors inline-flex items-center gap-2 ${
-              activeTab === 'connections'
-                ? 'border-secondary text-secondary font-semibold'
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">hub</span>
-            <span>Active Connections &amp; Graph</span>
-            <span className="px-2 py-0.5 rounded-full bg-surface-container-high font-code-sm text-code-sm">
-              {connections.length}
-            </span>
-          </button>
+      {/* Tab Navigation: ONLY shown for admin users */}
+      {isAdmin && (
+        <div className="flex items-center justify-between border-b border-surface-variant/40 gap-4 flex-wrap">
+          <div className="flex items-center gap-2" role="tablist" aria-label="Connections Page Tabs">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'connections'}
+              onClick={() => setActiveTab('connections')}
+              className={`min-h-[44px] px-4 py-2 font-title-md text-title-md border-b-2 transition-colors inline-flex items-center gap-2 ${
+                activeTab === 'connections'
+                  ? 'border-secondary text-secondary font-semibold'
+                  : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <Network className="w-4 h-4" />
+              <span>Connections</span>
+              <span className="px-2 py-0.5 rounded-full bg-surface-container-high font-code-sm text-code-sm">
+                {connections.length}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'activity-log'}
-            onClick={() => setActiveTab('activity-log')}
-            className={`min-h-[44px] px-4 py-2 font-title-md text-title-md border-b-2 transition-colors inline-flex items-center gap-2 ${
-              activeTab === 'activity-log'
-                ? 'border-primary text-primary font-semibold'
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">history</span>
-            <span>Activity Log</span>
-            <span className="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-code-sm text-code-sm">
-              {isAdmin ? connectionActivityHistory.length : 'Admin'}
-            </span>
-          </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'activity-log'}
+              onClick={() => setActiveTab('activity-log')}
+              className={`min-h-[44px] px-4 py-2 font-title-md text-title-md border-b-2 transition-colors inline-flex items-center gap-2 ${
+                activeTab === 'activity-log'
+                  ? 'border-primary text-primary font-semibold'
+                  : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>Activity Log (Admin)</span>
+              <span className="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary font-code-sm text-code-sm">
+                {connectionActivityHistory.length}
+              </span>
+            </button>
+          </div>
         </div>
+      )}
 
-        <span className="font-code-sm text-code-sm text-on-surface-variant pb-2">
-          {activeTab === 'activity-log'
-            ? 'Immutable timestamped connection audit trail'
-            : 'Real-time Constellation synchronization'}
-        </span>
-      </div>
-
-      {activeTab === 'activity-log' ? (
+      {isAdmin && activeTab === 'activity-log' ? (
         <section className="flex flex-col gap-space-lg">
           <div className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-md border border-surface-variant/30">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary-container/15 text-primary font-code-sm text-code-sm uppercase mb-1">
-                  <span className="material-symbols-outlined text-[14px]">admin_panel_settings</span>
+                  <Shield className="w-3.5 h-3.5" />
                   Admin Governance Review
                 </div>
                 <h2 className="font-headline-sm text-headline-sm text-on-surface">
                   Connection Status &amp; Lifecycle Activity Log
                 </h2>
                 <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
-                  Timestamped history of connection status updates (Active / Declined), new links, and removals across the Synapse Constellation.
+                  Timestamped history of connection status updates (Active / Declined), new links, and removals across Synapse.
                 </p>
               </div>
 
@@ -372,9 +378,7 @@ export const ConnectionsPage: React.FC = () => {
                     </label>
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
-                        <span className="material-symbols-outlined text-[16px] text-on-surface-variant absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                          badge
-                        </span>
+                        <User className="w-4 h-4 text-on-surface-variant absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           id="activity-user-id-filter"
                           type="text"
@@ -504,9 +508,9 @@ export const ConnectionsPage: React.FC = () => {
             {!isAdmin ? (
               <div className="bg-surface-container rounded-xl p-10 text-center flex flex-col items-center gap-space-sm border border-surface-variant/30">
                 <div className="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
-                  <span className="material-symbols-outlined text-[24px]">lock</span>
+                  <Lock className="w-6 h-6 text-primary" />
                 </div>
-                <h3 className="font-title-lg text-title-lg text-on-surface">
+                <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
                   Admin Access Required
                 </h3>
                 <p className="font-body-md text-body-md text-on-surface-variant max-w-md">
@@ -515,10 +519,8 @@ export const ConnectionsPage: React.FC = () => {
               </div>
             ) : connectionActivityHistory.length === 0 ? (
               <div className="bg-surface-container rounded-xl p-10 text-center flex flex-col items-center gap-space-sm">
-                <span className="material-symbols-outlined text-[32px] text-on-surface-variant">
-                  history_toggle_off
-                </span>
-                <h3 className="font-title-md text-title-md text-on-surface">
+                <History className="w-8 h-8 text-on-surface-variant" />
+                <h3 className="font-title-md text-title-md text-on-surface font-semibold">
                   No matching connection activity entries
                 </h3>
                 <p className="font-body-sm text-body-sm text-on-surface-variant max-w-md">
@@ -602,22 +604,13 @@ export const ConnectionsPage: React.FC = () => {
             <h2 className="font-headline-sm text-headline-sm text-on-surface">
               1. Active Connections List ({connections.length})
             </h2>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-code-sm text-code-sm">
-              <span className="material-symbols-outlined text-[14px] text-secondary">shield_lock</span>
-              {isAdmin
-                ? 'Admin Control Active'
-                : 'Protected · Admin & Connected Makers Control'}
-            </span>
           </div>
-          <span className="font-code-sm text-code-sm text-secondary">
-            Real-time Firestore sync
-          </span>
         </div>
 
         {connections.length === 0 ? (
           <div className="bg-surface-container-low rounded-2xl p-12 text-center flex flex-col items-center gap-space-md">
             <div className="w-14 h-14 rounded-full bg-secondary/10 text-secondary flex items-center justify-center">
-              <span className="material-symbols-outlined text-[30px]">hub</span>
+              <Network className="w-7 h-7" />
             </div>
             <h3 className="font-headline-sm text-headline-sm text-on-surface">
               0 connections created yet
@@ -631,7 +624,7 @@ export const ConnectionsPage: React.FC = () => {
               onClick={handleOpenLinkFlow}
               className="min-h-[44px] px-6 rounded-lg bg-secondary text-on-secondary font-title-md text-title-md font-semibold inline-flex items-center gap-2"
             >
-              <span className="material-symbols-outlined text-[18px]">add_link</span>
+              <Link2 className="w-4 h-4" />
               Link Two Ideas
             </button>
           </div>
@@ -746,8 +739,8 @@ export const ConnectionsPage: React.FC = () => {
                         </button>
                       </div>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-on-surface-variant/70">
-                        <span className="material-symbols-outlined text-[14px]">lock</span>
+                      <span className="inline-flex items-center gap-1 text-on-surface-variant/70 text-[12px]">
+                        <Lock className="w-3.5 h-3.5" />
                         Admin &amp; connected makers only
                       </span>
                     )}
@@ -759,15 +752,15 @@ export const ConnectionsPage: React.FC = () => {
         )}
       </section>
 
-      {/* 2. INTERACTIVE CONSTELLATION MAP */}
+      {/* 2. INTERACTIVE IDEA MAP */}
       <section className="flex flex-col gap-space-md">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 className="font-headline-sm text-headline-sm text-on-surface">
-              2. Interactive 2D Constellation Map
+              2. Interactive Idea Map
             </h2>
-            <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Tap or click any node to inspect its specification or link it with another node.
+            <p className="font-body-sm text-[13px] text-on-surface-variant">
+              See how related ideas connect. Tap or click any idea to inspect it or link it with another.
             </p>
           </div>
           <div className="flex items-center gap-4 font-code-sm text-code-sm">
@@ -792,7 +785,7 @@ export const ConnectionsPage: React.FC = () => {
               viewBox="0 0 700 360"
               className="w-full h-full max-h-[420px] touch-manipulation select-none"
               role="img"
-              aria-label="Interactive 2D Constellation Graph of Synapse Ideas"
+              aria-label="Interactive 2D Idea Map of Synapse Ideas"
             >
               {/* Subtle radial rings */}
               <circle
@@ -920,13 +913,16 @@ export const ConnectionsPage: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 pt-space-md border-t border-surface-variant/30">
-                  <Link
-                    to={`/ideas/${selectedIdea.id}`}
-                    className="min-h-[44px] px-4 rounded-lg bg-primary-container text-on-primary font-title-md text-title-md flex items-center justify-center gap-2"
-                  >
-                    <span>Open Specification</span>
-                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/ideas/${selectedIdea.id}`}
+                      className="flex-1 min-h-[44px] px-4 rounded-lg bg-primary-container text-on-primary font-title-md text-title-md flex items-center justify-center gap-2 font-semibold hover:opacity-90 transition-opacity"
+                    >
+                      <span>View idea</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                    <BookmarkButton idea={selectedIdea} variant="button" />
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
@@ -935,13 +931,13 @@ export const ConnectionsPage: React.FC = () => {
                     }}
                     className="min-h-[44px] px-4 rounded-lg bg-surface-container-high text-secondary font-title-md text-title-md flex items-center justify-center gap-2 hover:bg-surface-bright"
                   >
-                    <span className="material-symbols-outlined text-[18px]">hub</span>
+                    <Network className="w-4 h-4" />
                     <span>Link with another idea</span>
                   </button>
                 </div>
               </>
             ) : (
-              <p className="text-on-surface-variant">Select a node on the graph.</p>
+              <p className="text-on-surface-variant">Select an idea on the map.</p>
             )}
           </div>
         </div>
@@ -959,7 +955,7 @@ export const ConnectionsPage: React.FC = () => {
           <div className="bg-surface-container w-full max-w-lg rounded-2xl p-space-xl flex flex-col gap-space-md shadow-2xl border border-surface-variant/40">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-secondary">
-                <span className="material-symbols-outlined text-[24px]">hub</span>
+                <Network className="w-6 h-6" />
                 <h3 className="font-headline-sm text-headline-sm text-on-surface">
                   Link Two Complementary Ideas
                 </h3>
@@ -967,16 +963,16 @@ export const ConnectionsPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowLinkModal(false)}
-                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-on-surface-variant hover:text-on-surface"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-lg"
               >
-                <span className="material-symbols-outlined">close</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleCreateConnection} className="flex flex-col gap-space-md">
               <div>
                 <label className="font-code-sm text-code-sm text-on-surface-variant uppercase block mb-1">
-                  First Idea (Node A)
+                  First Idea
                 </label>
                 <select
                   value={ideaAId}
@@ -993,7 +989,7 @@ export const ConnectionsPage: React.FC = () => {
 
               <div>
                 <label className="font-code-sm text-code-sm text-on-surface-variant uppercase block mb-1">
-                  Second Idea (Node B)
+                  Second Idea
                 </label>
                 <select
                   value={ideaBId}

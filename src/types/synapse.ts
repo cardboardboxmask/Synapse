@@ -24,6 +24,11 @@ export interface NotificationPreferences {
   statusChanges: boolean;
 }
 
+export interface UserPreferences {
+  savedIdeaIds?: string[];
+  theme?: 'dark' | 'light';
+}
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -38,6 +43,8 @@ export interface UserProfile {
   suspendedReason?: string;
   accountStatus?: 'active' | 'disabled' | 'deleted';
   notificationPrefs?: NotificationPreferences;
+  savedIdeaIds?: string[];
+  preferences?: UserPreferences;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +75,7 @@ export interface Idea {
   status: IdeaStatus;
   license: IdeaLicense;
   authorId: string;
+  authorUid?: string;
   authorName: string;
   authorUsername: string;
   isSeed: boolean;

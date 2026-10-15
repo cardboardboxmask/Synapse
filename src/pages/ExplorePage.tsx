@@ -6,6 +6,7 @@ import { BookmarkButton } from '../components/BookmarkButton';
 import { PageMeta } from '../components/PageMeta';
 import { IdeaCardSkeletonGrid } from '../components/Skeletons';
 import { Idea } from '../types/synapse';
+import { formatRelativeTime } from '../utils/sanitize';
 import {
   fetchIdeasCursorPage,
   SEARCHABLE_FIELDS_SUMMARY,
@@ -17,6 +18,7 @@ const ITEMS_PER_PAGE = 6;
 export const ExplorePage: React.FC = () => {
   const {
     user,
+    isAdmin,
     ideas,
     ideasLoading,
     ideasError,
@@ -190,12 +192,10 @@ export const ExplorePage: React.FC = () => {
 
   const paginatedIdeas = useMemo(() => {
     if (simulatedZeroState) return [];
-    if (canUseDirectFirestoreCursor && cursorIdeas && cursorIdeas.length > 0) {
-      return cursorIdeas;
-    }
+    // Prioritize client-side filtering which is safer for small sets
     const start = (safePage - 1) * ITEMS_PER_PAGE;
     return filteredIdeas.slice(start, start + ITEMS_PER_PAGE);
-  }, [simulatedZeroState, canUseDirectFirestoreCursor, cursorIdeas, filteredIdeas, safePage]);
+  }, [simulatedZeroState, filteredIdeas, safePage]);
 
   const hasNextPage =
     canUseDirectFirestoreCursor && cursorIdeas !== null
@@ -217,8 +217,8 @@ export const ExplorePage: React.FC = () => {
   return (
     <div className="flex flex-col w-full">
       <PageMeta
-        title="Public Idea Nexus — Explore Ideas on Synapse"
-        description="Browse early-stage technical specs, software ideas, and open hardware prototypes seeking builders or technical guidance."
+        title="Explore Ideas — Synapse"
+        description="Browse ideas posted by people looking for builders or guidance. Pick an idea up, collaborate, or offer feedback."
       />
 
       {/* Top Filter Workbench */}
@@ -231,23 +231,22 @@ export const ExplorePage: React.FC = () => {
             <div className="flex flex-col gap-space-xs">
               <div className="flex items-center gap-space-xs">
                 <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
-                <span className="font-code-sm text-code-sm text-secondary uppercase tracking-wider">
-                  Protocol Registry • Constellation Beta
+                <span className="font-code-sm text-[13px] text-secondary font-medium">
+                  Community Ideas
                 </span>
               </div>
               <h1 className="font-headline-lg text-headline-lg-mobile sm:text-headline-lg font-bold text-on-surface tracking-tight">
-                Public Idea Nexus
+                Explore Ideas
               </h1>
-              <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl">
-                Autonomous registry of early-stage technical specs, open hardware prototypes, and
-                public utility tooling seeking collaborative kinetic velocity.
+              <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl leading-relaxed">
+                Browse ideas posted by people who need help building or refining them. Anyone can jump in, collaborate, or offer advice.
               </p>
             </div>
 
             <div className="flex items-center gap-space-sm bg-surface-container-high px-space-md py-space-xs rounded-xl self-start lg:self-auto">
               <span className="material-symbols-outlined text-[16px] text-secondary">link</span>
-              <span className="font-code-sm text-code-sm text-on-surface-variant">URI:</span>
-              <code className="font-code-sm text-code-sm text-secondary font-mono tracking-tight">
+              <span className="font-code-sm text-[13px] text-on-surface-variant">Filter link:</span>
+              <code className="font-code-sm text-[13px] text-secondary font-mono tracking-tight">
                 {uriPreview}
               </code>
             </div>
@@ -315,79 +314,83 @@ export const ExplorePage: React.FC = () => {
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => setSimulatedZeroState((prev) => !prev)}
-                  className={`min-h-[44px] px-space-md rounded-lg font-title-md text-title-md transition-colors flex items-center gap-space-xs whitespace-nowrap ${
-                    simulatedZeroState
-                      ? 'bg-primary-container text-on-primary'
-                      : 'bg-surface-container-highest text-on-surface hover:bg-surface-bright'
-                  }`}
-                  title="Toggle to preview zero results empty state"
-                >
-                  <span className="material-symbols-outlined text-[16px]">filter_alt_off</span>
-                  <span className="hidden sm:inline">Simulate</span> Zero State
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setSimulatedZeroState((prev) => !prev)}
+                    className={`min-h-[44px] px-space-md rounded-lg font-title-md text-title-md transition-colors flex items-center gap-space-xs whitespace-nowrap ${
+                      simulatedZeroState
+                        ? 'bg-primary-container text-on-primary'
+                        : 'bg-surface-container-highest text-on-surface hover:bg-surface-bright'
+                    }`}
+                    title="Toggle to preview zero results empty state"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                    <span className="hidden sm:inline">Simulate</span> Zero State
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Searchable Fields Scope Notice */}
-            <div className="flex items-center justify-between flex-wrap gap-2 text-on-surface-variant font-code-sm text-code-sm">
-              <span>
-                Deterministic query scope (<code className="text-secondary">q</code>):{' '}
-                {SEARCHABLE_FIELDS_SUMMARY}
-              </span>
-              {canUseDirectFirestoreCursor && (
-                <span className="text-secondary">Firestore Cursor Pagination Active</span>
-              )}
-            </div>
+            {isAdmin && (
+              <div className="flex items-center justify-between flex-wrap gap-2 text-on-surface-variant font-code-sm text-code-sm">
+                <span>
+                  Query scope (<code className="text-secondary">q</code>): {SEARCHABLE_FIELDS_SUMMARY}
+                </span>
+                {canUseDirectFirestoreCursor && (
+                  <span className="text-secondary">Firestore Cursor Pagination Active</span>
+                )}
+              </div>
+            )}
 
-            {/* Taxonomy Chips */}
+            {/* Category Filter Chips - only shown if category has at least 1 idea */}
             <div className="flex flex-wrap items-center gap-space-xs pt-space-xs">
-              <span className="font-code-sm text-code-sm text-on-surface-variant uppercase tracking-wider mr-space-xs">
-                Taxonomy:
+              <span className="font-code-sm text-[13px] text-on-surface-variant font-medium mr-space-xs">
+                Category:
               </span>
               {[
-                { key: 'all', label: `All (${taxonomyCounts.all})` },
-                { key: 'software', label: `Software (${taxonomyCounts.software})` },
-                { key: 'hardware', label: `Hardware (${taxonomyCounts.hardware})` },
-                { key: 'ai', label: `AI (${taxonomyCounts.ai})` },
-                { key: 'web', label: `Web (${taxonomyCounts.web})` },
-                { key: 'opensource', label: `Open Source (${taxonomyCounts.opensource})` },
-                { key: 'other', label: `Other (${taxonomyCounts.other})` },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => updateParam('cat', item.key)}
-                  className={`min-h-[36px] px-3 rounded-full font-label-sm text-label-sm transition-colors ${
-                    cat.toLowerCase() === item.key
-                      ? 'bg-primary-container text-on-primary font-semibold'
-                      : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+                { key: 'all', label: `All (${taxonomyCounts.all})`, count: taxonomyCounts.all },
+                { key: 'software', label: `Software (${taxonomyCounts.software})`, count: taxonomyCounts.software },
+                { key: 'hardware', label: `Hardware (${taxonomyCounts.hardware})`, count: taxonomyCounts.hardware },
+                { key: 'ai', label: `AI (${taxonomyCounts.ai})`, count: taxonomyCounts.ai },
+                { key: 'web', label: `Web (${taxonomyCounts.web})`, count: taxonomyCounts.web },
+                { key: 'opensource', label: `Open Source (${taxonomyCounts.opensource})`, count: taxonomyCounts.opensource },
+                { key: 'other', label: `Other (${taxonomyCounts.other})`, count: taxonomyCounts.other },
+              ]
+                .filter((item) => item.key === 'all' || item.count > 0)
+                .map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => updateParam('cat', item.key)}
+                    className={`min-h-[36px] px-3.5 rounded-full font-label-md text-[13px] transition-colors ${
+                      cat.toLowerCase() === item.key
+                        ? 'bg-primary-container text-on-primary font-semibold'
+                        : 'bg-surface-container-highest text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
             </div>
 
-            {/* Assistance Vector & Lifecycle Status */}
+            {/* Track & Lifecycle Status */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md pt-space-xs">
               <div className="flex flex-col gap-space-xs">
-                <span className="font-code-sm text-code-sm text-on-surface-variant uppercase tracking-wider">
-                  Assistance Vector
+                <span className="font-code-sm text-[13px] text-on-surface-variant font-medium">
+                  Track
                 </span>
                 <div className="inline-flex p-1 bg-surface-container-highest rounded-lg w-full max-w-md">
                   {[
                     { key: 'all', label: 'All Tracks' },
                     { key: 'guidance', label: 'Needs Guidance' },
-                    { key: 'builder', label: 'Needs Builder' },
+                    { key: 'builder', label: 'Needs a Builder' },
                   ].map((t) => (
                     <button
                       key={t.key}
                       type="button"
                       onClick={() => updateParam('track', t.key)}
-                      className={`flex-1 min-h-[38px] rounded font-label-md text-label-md transition-all ${
+                      className={`flex-1 min-h-[38px] rounded font-label-md text-[13px] transition-all ${
                         track === t.key
                           ? 'bg-surface-container text-on-surface font-semibold shadow-sm'
                           : 'text-on-surface-variant hover:text-on-surface'
@@ -470,18 +473,19 @@ export const ExplorePage: React.FC = () => {
         <div className="flex items-center justify-between pb-space-lg">
           <div className="flex items-baseline gap-space-sm">
             <h2 className="font-headline-sm text-headline-sm font-semibold text-on-surface">
-              Curated Starter Specimen &amp; Community Specs
+              Community Specifications
             </h2>
-            <span className="font-code-sm text-code-sm text-secondary bg-surface-container-high px-2.5 py-0.5 rounded-full">
-              {filteredIdeas.length} active {filteredIdeas.length === 1 ? 'node' : 'nodes'}
+            <span className="font-code-sm text-[13px] text-secondary bg-surface-container-high px-2.5 py-0.5 rounded-full font-medium">
+              {filteredIdeas.length} active {filteredIdeas.length === 1 ? 'idea' : 'ideas'}
             </span>
           </div>
           <Link
             to="/connections"
-            className="hidden sm:flex items-center gap-space-xs font-code-sm text-code-sm text-on-surface-variant hover:text-secondary transition-colors"
+            title="See how related ideas connect"
+            className="hidden sm:flex items-center gap-space-xs font-code-sm text-[13px] text-on-surface-variant hover:text-secondary transition-colors"
           >
             <span className="material-symbols-outlined text-[16px] text-secondary">hub</span>
-            <span>Open Constellation Map →</span>
+            <span>Open Idea Map →</span>
           </Link>
         </div>
 
@@ -518,141 +522,172 @@ export const ExplorePage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-space-lg">
-            {paginatedIdeas.map((idea) => (
-              <article
-                key={idea.id}
-                className="group flex flex-col justify-between bg-surface-container-low hover:bg-surface-container rounded-2xl p-space-lg transition-all duration-200"
-              >
-                <div className="flex flex-col gap-space-md">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-label-sm text-label-sm uppercase tracking-wide ${
-                          idea.helpTrack === 'builder'
-                            ? 'bg-primary-container/20 text-primary'
-                            : 'bg-tertiary-container/20 text-tertiary'
-                        }`}
-                      >
-                        {idea.helpTrack === 'builder' ? 'Needs a builder' : 'Needs guidance'}
-                      </span>
-                      {idea.adminVerified && (
-                        <span
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary/15 text-secondary font-code-sm text-[11px] font-semibold uppercase tracking-wide"
-                          title="Reviewed and verified by a Synapse Administrator"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[14px]"
-                            aria-hidden="true"
-                          >
-                            verified
+            {paginatedIdeas.map((idea) => {
+              const hasActivity = (idea.volunteerCount || 0) > 0 || (idea.connectionCount || 0) > 0;
+              const problemLine = idea.problem?.trim() || idea.summary;
+
+              return (
+                <article
+                  key={idea.id}
+                  className="group flex flex-col justify-between bg-surface-container-low hover:bg-surface-container rounded-2xl p-space-lg transition-all duration-200 border border-surface-variant/30 hover:border-surface-variant/60"
+                >
+                  <div className="flex flex-col gap-space-md">
+                    {/* Header tags: Category & Track & Status */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {idea.category && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant font-label-md text-[13px] capitalize">
+                            {idea.category}
                           </span>
-                          <span>Admin Verified</span>
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface-variant capitalize">
+                        )}
                         <span
-                          className={`w-2 h-2 rounded-full ${
-                            idea.status === 'open'
-                              ? 'bg-primary-container'
-                              : idea.status === 'in-progress'
-                              ? 'bg-secondary'
-                              : 'bg-tertiary'
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full font-label-md text-[13px] font-medium ${
+                            idea.helpTrack === 'builder'
+                              ? 'bg-primary-container/20 text-primary'
+                              : 'bg-secondary/15 text-secondary'
                           }`}
-                        />
-                        <span>{idea.status.replace('-', ' ')}</span>
+                        >
+                          {idea.helpTrack === 'builder' ? 'Needs a Builder' : 'Needs Guidance'}
+                        </span>
+                        {idea.adminVerified && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary font-code-sm text-[12px] font-semibold"
+                            title="Reviewed and verified"
+                          >
+                            <span className="material-symbols-outlined text-[13px]">verified</span>
+                            <span>Verified</span>
+                          </span>
+                        )}
                       </div>
-                      <BookmarkButton idea={idea} variant="icon" />
+
+                      <div className="flex items-center gap-2">
+                        <BookmarkButton idea={idea} variant="icon" />
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex flex-col gap-space-xs">
-                    <Link to={`/ideas/${idea.id}`}>
-                      <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface group-hover:text-primary transition-colors leading-snug">
-                        {idea.title}
-                      </h3>
-                    </Link>
-                    <p className="font-body-md text-body-md text-on-surface-variant line-clamp-3">
-                      {idea.summary}
-                    </p>
-                  </div>
+                    {/* Title & One-line Problem Statement */}
+                    <div className="flex flex-col gap-1.5">
+                      <Link to={`/ideas/${idea.id}`}>
+                        <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface group-hover:text-primary transition-colors leading-snug">
+                          {idea.title}
+                        </h3>
+                      </Link>
+                      <p className="font-body-md text-[14px] text-on-surface-variant line-clamp-3 leading-relaxed">
+                        {problemLine}
+                      </p>
+                    </div>
 
-                  <div className="flex flex-wrap gap-1.5 pt-space-xs">
-                    {idea.tags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => updateParam('q', tag)}
-                        className="font-code-sm text-code-sm bg-surface-container-high hover:bg-surface-bright text-on-surface-variant hover:text-on-surface px-2 py-0.5 rounded transition-colors"
-                      >
-                        #{tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                    {/* What help do you need (if present) */}
+                    {idea.helpWanted && (
+                      <div className="px-3 py-2 rounded-xl bg-surface-container-highest/60 border border-surface-variant/30 text-[13px] text-on-surface-variant flex items-start gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-primary shrink-0 mt-0.5">
+                          handshake
+                        </span>
+                        <div className="line-clamp-2">
+                          <strong className="text-on-surface font-medium">Help needed: </strong>
+                          {idea.helpWanted}
+                        </div>
+                      </div>
+                    )}
 
-                <div className="flex flex-col gap-space-md pt-space-lg mt-space-md bg-surface-container-lowest/40 -mx-space-lg -mb-space-lg p-space-lg rounded-b-2xl">
-                  <div className="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm">
-                    <Link
-                      to={`/u/${idea.authorUsername}`}
-                      className="flex items-center gap-space-xs hover:text-primary transition-colors"
-                    >
-                      <span className="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-code-sm text-[10px] font-bold">
-                        {idea.authorUsername.slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="text-on-surface font-label-md text-label-md">
-                        @{idea.authorUsername}
-                      </span>
-                    </Link>
-                    {idea.isSeed && (
-                      <span className="font-code-sm text-code-sm text-primary">
-                        Starter idea from the founder
-                      </span>
+                    {/* Tags */}
+                    {idea.tags && idea.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-space-xs">
+                        {idea.tags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => updateParam('q', tag)}
+                            className="font-code-sm text-[13px] bg-surface-container-high hover:bg-surface-bright text-on-surface-variant hover:text-on-surface px-2.5 py-0.5 rounded transition-colors"
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-space-xs">
-                    <div className="flex items-center gap-space-sm font-code-sm text-code-sm text-on-surface-variant">
-                      <Link
-                        to={`/ideas/${idea.id}/volunteers`}
-                        className="flex items-center gap-1 hover:text-on-surface"
-                        title="Active volunteers"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">group</span>
-                        {idea.volunteerCount || 0}
-                      </Link>
-                      <Link
-                        to={`/ideas/${idea.id}/connections`}
-                        className={`flex items-center gap-1 ${
-                          idea.connectionCount > 0 ? 'text-secondary' : 'text-on-surface-variant'
-                        }`}
-                        title="Connected ideas"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">scatter_plot</span>
-                        {idea.connectionCount || 0}
-                      </Link>
-                      <Link
-                        to={`/ideas/${idea.id}/responses`}
-                        className="flex items-center gap-1 hover:text-on-surface"
-                        title="Responses"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">chat_bubble</span>
-                        {idea.responseCount || 0}
-                      </Link>
+                  {/* Footer metadata: Author, Time, Activity & View Idea */}
+                  <div className="flex flex-col gap-space-sm pt-space-md mt-space-md bg-surface-container-lowest/50 -mx-space-lg -mb-space-lg p-space-lg rounded-b-2xl border-t border-surface-variant/20">
+                    <div className="flex items-center justify-between text-on-surface-variant font-body-sm text-[13px]">
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          to={`/u/${idea.authorUsername}`}
+                          className="flex items-center gap-2 hover:text-primary transition-colors"
+                        >
+                          <span className="w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-code-sm text-[11px] font-bold">
+                            {(idea.authorUsername || 'A').slice(0, 2).toUpperCase()}
+                          </span>
+                          <span className="text-on-surface font-label-md text-[13px] font-medium">
+                            @{idea.authorUsername}
+                          </span>
+                        </Link>
+                        {(idea.authorUsername === 'admin' || idea.authorUsername === 'cardboardboxmask') && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary font-bold uppercase tracking-wider">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-on-surface-variant text-[13px]">
+                        {formatRelativeTime(idea.createdAt)}
+                      </span>
                     </div>
 
-                    <Link
-                      to={`/ideas/${idea.id}`}
-                      className="inline-flex items-center gap-1 font-title-md text-title-md text-secondary hover:text-secondary-fixed transition-colors"
-                    >
-                      Explore Idea
-                      <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                    </Link>
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-3 font-body-sm text-[13px] text-on-surface-variant">
+                        {hasActivity ? (
+                          <>
+                            {idea.volunteerCount > 0 && (
+                              <Link
+                                to={`/ideas/${idea.id}/volunteers`}
+                                className="flex items-center gap-1 hover:text-on-surface"
+                                title="Volunteers"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">group</span>
+                                <span>{idea.volunteerCount}</span>
+                              </Link>
+                            )}
+                            {idea.connectionCount > 0 && (
+                              <Link
+                                to={`/ideas/${idea.id}/connections`}
+                                className="flex items-center gap-1 text-secondary hover:text-on-surface"
+                                title="Connected ideas"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">scatter_plot</span>
+                                <span>{idea.connectionCount}</span>
+                              </Link>
+                            )}
+                            {idea.responseCount > 0 && (
+                              <Link
+                                to={`/ideas/${idea.id}/responses`}
+                                className="flex items-center gap-1 hover:text-on-surface"
+                                title="Responses"
+                              >
+                                <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
+                                <span>{idea.responseCount}</span>
+                              </Link>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-secondary font-medium text-[13px] flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[15px]">volunteer_activism</span>
+                            <span>Be the first to help</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <Link
+                        to={`/ideas/${idea.id}`}
+                        className="inline-flex items-center gap-1 font-title-md text-[14px] text-primary hover:text-primary-container font-semibold transition-colors"
+                      >
+                        View idea
+                        <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
 

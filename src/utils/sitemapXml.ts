@@ -1,14 +1,10 @@
 import { getApps, initializeApp } from 'firebase/app';
 import {
   collection,
-  doc,
-  getDoc,
   getDocs,
   getFirestore,
-  setDoc,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { SEED_IDEAS } from '../data/seedIdeas';
 import { Idea, UserProfile } from '../types/synapse';
 
 export interface SitemapUrlEntry {
@@ -45,7 +41,7 @@ function getServerFirestore() {
 
 /**
   * Queries Firestore for all active (non-deleted) ideas and active public user profiles,
-  * ensuring starter ideas are seeded when the database is empty, and builds a complete XML Sitemap.
+  * and builds a complete XML Sitemap.
   * Deleted ideas and deleted/anonymized accounts are automatically excluded from the sitemap.
   */
 export async function generateSitemapXmlFromFirestore(
@@ -58,36 +54,19 @@ export async function generateSitemapXmlFromFirestore(
 }> {
   const cleanOrigin = baseOrigin.replace(/\/+$/, '');
   const ideasMap = new Map<string, Idea>();
-  const usernamesSet = new Set<string>(['founder']);
+  const usernamesSet = new Set<string>();
 
   try {
     const db = getServerFirestore();
 
     // Fetch existing ideas in Firestore
-    let ideasSnapshot = await getDocs(collection(db, 'ideas'));
-
-    // If the collection is completely empty, seed starter ideas once
-    if (ideasSnapshot.empty) {
-      for (const seed of SEED_IDEAS) {
-        try {
-          const seedRef = doc(db, 'ideas', seed.id);
-          const snap = await getDoc(seedRef);
-          if (!snap.exists()) {
-            const { id: _id, ...payload } = seed;
-            await setDoc(seedRef, payload);
-          }
-        } catch {
-          // Non-fatal if rules or network prevent seeding during read
-        }
-      }
-      ideasSnapshot = await getDocs(collection(db, 'ideas'));
-    }
+    const ideasSnapshot = await getDocs(collection(db, 'ideas'));
 
     if (!ideasSnapshot.empty) {
       ideasSnapshot.forEach((docSnap) => {
         const data = docSnap.data() as Omit<Idea, 'id'>;
-        // Exclude soft-deleted ideas from sitemap
-        if (data.deletedAt) return;
+        // Exclude soft-deleted and mock/seed ideas from sitemap
+        if (data.deletedAt || data.isSeed || docSnap.id.startsWith('seed-')) return;
         const idea: Idea = {
           ...data,
           id: docSnap.id,
@@ -97,14 +76,6 @@ export async function generateSitemapXmlFromFirestore(
           usernamesSet.add(idea.authorUsername);
         }
       });
-    } else {
-      // Fallback if Firestore is unreachable
-      for (const seed of SEED_IDEAS) {
-        ideasMap.set(seed.id, seed);
-        if (seed.authorUsername) {
-          usernamesSet.add(seed.authorUsername);
-        }
-      }
     }
 
     // Fetch active public maker profiles in Firestore
@@ -125,13 +96,7 @@ export async function generateSitemapXmlFromFirestore(
       // Non-fatal if users collection is empty
     }
   } catch (err) {
-    console.warn('Sitemap Firestore fetch fallback notice:', err);
-    for (const seed of SEED_IDEAS) {
-      ideasMap.set(seed.id, seed);
-      if (seed.authorUsername) {
-        usernamesSet.add(seed.authorUsername);
-      }
-    }
+    console.warn('Sitemap Firestore fetch notice:', err);
   }
 
   const allIdeas = Array.from(ideasMap.values()).sort((a, b) =>

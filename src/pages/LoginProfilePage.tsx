@@ -9,6 +9,7 @@ import {
   changeUsernameWithTransaction,
   db,
   deleteUserAccountLifecycle,
+  ensureUserProfile,
   isUsernameAvailable,
   reloadAuthUser,
   removeBookmark,
@@ -18,6 +19,7 @@ import {
   signOutUser,
   signUpWithEmail,
   updateUserProfile,
+  SOLE_ADMIN_UID,
 } from '../firebase';
 import { UserProfile, Volunteer } from '../types/synapse';
 import { AVATAR_UPLOAD_POLICY, validateMediaFileSignature } from '../utils/mediaPolicy';
@@ -27,9 +29,38 @@ import {
   validateExternalUrl,
   validateUsername,
 } from '../utils/sanitize';
+import {
+  Bookmark,
+  BookmarkX,
+  LockOpen,
+  LogIn,
+  LogOut,
+  CheckCircle2,
+  ShieldCheck,
+  Upload,
+  AtSign,
+  ShieldAlert,
+  Compass,
+  Search,
+  X,
+  Handshake,
+  StickyNote,
+  Edit3,
+  Users,
+  Network,
+  MessageSquare,
+  FileEdit,
+  ArrowRight,
+  Plus,
+  Flag,
+  Shield,
+  Mail,
+  LayoutDashboard,
+} from 'lucide-react';
+import { IdeaCardOverflowMenu } from '../components/IdeaCardOverflowMenu';
 
 export const LoginPage: React.FC = () => {
-  const { user, authReady, showToast } = useApp();
+  const { user, authReady, showToast, savedBookmarks } = useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [signingIn, setSigningIn] = useState(false);
@@ -59,6 +90,7 @@ export const LoginPage: React.FC = () => {
     try {
       const signedIn = await signInWithGoogle();
       if (signedIn) {
+        await ensureUserProfile(signedIn).catch(() => {});
         showToast('Signed in with Google.', 'success');
         navigate(returnTo, { replace: true });
       }
@@ -112,16 +144,17 @@ export const LoginPage: React.FC = () => {
       />
       <div className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col items-center text-center gap-space-lg shadow-xl border border-surface-variant/40">
         <div className="w-14 h-14 rounded-2xl bg-primary/15 text-primary flex items-center justify-center">
-          <span className="material-symbols-outlined text-[30px]">lock_open</span>
+          <LockOpen className="w-7 h-7" />
         </div>
 
         <div className="flex flex-col gap-space-xs">
           <h1 className="font-headline-md text-headline-md text-on-surface">
-            Sign in to Synapse
+            {returnTo.startsWith('/post') ? 'Sign in to post your idea' : 'Sign in to Synapse'}
           </h1>
           <p className="font-body-md text-body-md text-on-surface-variant">
-            Browsing is always public. Sign in with Google to post an idea, save bookmarks to your
-            profile, link specifications, or volunteer to build.
+            {returnTo.startsWith('/post')
+              ? 'Sign in with Google to start your 4-step idea post. Takes under 2 minutes, and your idea remains 100% yours.'
+              : 'Browsing is always public. Sign in with Google to post an idea, save bookmarks to your profile, link ideas, or volunteer to build.'}
           </p>
         </div>
 
@@ -131,13 +164,22 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
+        {savedBookmarks.length > 0 && (
+          <div className="w-full p-3 rounded-xl bg-primary-container/20 border border-primary/30 flex items-center gap-2.5 text-left text-on-surface text-[13px]">
+            <Bookmark className="w-5 h-5 text-primary shrink-0" />
+            <span>
+              You have <strong>{savedBookmarks.length} saved {savedBookmarks.length === 1 ? 'idea' : 'ideas'}</strong> on this device. Sign in to sync them to your maker profile!
+            </span>
+          </div>
+        )}
+
         <button
           type="button"
           disabled={signingIn}
           onClick={handleGoogleSignIn}
           className="w-full min-h-[48px] px-space-lg rounded-lg bg-primary-container text-on-primary font-title-md text-title-md flex items-center justify-center gap-3 shadow-md hover:opacity-95 transition-opacity disabled:opacity-50"
         >
-          <span className="material-symbols-outlined text-[20px]">login</span>
+          <LogIn className="w-5 h-5" />
           <span>{signingIn ? 'Connecting with Google...' : 'Continue with Google'}</span>
         </button>
 
@@ -245,15 +287,11 @@ export const LoginPage: React.FC = () => {
 
         <div className="w-full pt-space-md border-t border-surface-variant/30 text-left space-y-2 font-code-sm text-code-sm text-on-surface-variant">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-secondary text-[16px]">
-              check_circle
-            </span>
+            <CheckCircle2 className="w-4 h-4 text-secondary" />
             <span>No passwords to manage, zero marketing emails</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-secondary text-[16px]">
-              check_circle
-            </span>
+            <CheckCircle2 className="w-4 h-4 text-secondary" />
             <span>Your posted ideas remain 100% yours</span>
           </div>
         </div>
@@ -395,14 +433,48 @@ export const ProfilePage: React.FC = () => {
   }, [user, ideas]);
 
   const myIdeas = useMemo(
-    () => (user ? ideas.filter((i) => i.authorId === user.uid) : []),
-    [ideas, user]
+    () =>
+      user
+        ? ideas.filter(
+            (i) =>
+              i.authorId === user.uid ||
+              i.authorUid === user.uid ||
+              (isAdmin &&
+                (i.authorId === SOLE_ADMIN_UID ||
+                  i.authorUid === SOLE_ADMIN_UID ||
+                  i.authorUsername === 'admin' ||
+                  i.authorUsername === 'cardboardboxmask'))
+          )
+        : [],
+    [ideas, user, isAdmin]
   );
 
   const myConnections = useMemo(
     () => (user ? connections.filter((c) => c.createdBy === user.uid) : []),
     [connections, user]
   );
+
+  // Saved Ideas filter and search state
+  const [savedSearchQuery, setSavedSearchQuery] = useState('');
+  const [savedTrackFilter, setSavedTrackFilter] = useState<'all' | 'guidance' | 'builder'>('all');
+  const [savedCategoryFilter, setSavedCategoryFilter] = useState<string>('all');
+  const [savedSort, setSavedSort] = useState<'saved-desc' | 'activity' | 'title'>('saved-desc');
+
+  // Handle smooth scroll to hash anchors on mount / hash change
+  useEffect(() => {
+    if (window.location.hash) {
+      const id = window.location.hash.replace('#', '');
+      const target =
+        id === 'saved-ideas' || id === 'saved-bookmarks'
+          ? document.getElementById('saved-ideas') || document.getElementById('saved-bookmarks')
+          : document.getElementById(id);
+      if (target) {
+        setTimeout(() => {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 120);
+      }
+    }
+  }, []);
 
   const resolvedBookmarks = useMemo(() => {
     return savedBookmarks.map((b) => {
@@ -413,6 +485,72 @@ export const ProfilePage: React.FC = () => {
       };
     });
   }, [savedBookmarks, ideas]);
+
+  const savedCategories = useMemo(() => {
+    const set = new Set<string>();
+    resolvedBookmarks.forEach(({ bookmark, liveIdea }) => {
+      const cat = liveIdea?.category || bookmark.ideaCategory;
+      if (cat) set.add(cat);
+    });
+    return Array.from(set);
+  }, [resolvedBookmarks]);
+
+  const filteredSavedBookmarks = useMemo(() => {
+    let list = resolvedBookmarks;
+
+    // Filter by search query
+    if (savedSearchQuery.trim()) {
+      const q = savedSearchQuery.trim().toLowerCase();
+      list = list.filter(({ bookmark, liveIdea }) => {
+        const title = (liveIdea?.title || bookmark.ideaTitle || '').toLowerCase();
+        const summary = (liveIdea?.summary || bookmark.ideaSummary || '').toLowerCase();
+        const problem = (liveIdea?.problem || '').toLowerCase();
+        const note = (bookmark.note || '').toLowerCase();
+        const author = (liveIdea?.authorUsername || '').toLowerCase();
+        const tags = (liveIdea?.tags || []).join(' ').toLowerCase();
+        return (
+          title.includes(q) ||
+          summary.includes(q) ||
+          problem.includes(q) ||
+          note.includes(q) ||
+          author.includes(q) ||
+          tags.includes(q)
+        );
+      });
+    }
+
+    // Filter by track
+    if (savedTrackFilter !== 'all') {
+      list = list.filter(({ bookmark, liveIdea }) => {
+        const track = liveIdea?.helpTrack || bookmark.ideaHelpTrack;
+        return track === savedTrackFilter;
+      });
+    }
+
+    // Filter by category
+    if (savedCategoryFilter !== 'all') {
+      list = list.filter(({ bookmark, liveIdea }) => {
+        const cat = (liveIdea?.category || bookmark.ideaCategory || '').toLowerCase();
+        return cat === savedCategoryFilter.toLowerCase();
+      });
+    }
+
+    // Sort
+    return [...list].sort((a, b) => {
+      if (savedSort === 'title') {
+        const titleA = (a.liveIdea?.title || a.bookmark.ideaTitle || '').toLowerCase();
+        const titleB = (b.liveIdea?.title || b.bookmark.ideaTitle || '').toLowerCase();
+        return titleA.localeCompare(titleB);
+      }
+      if (savedSort === 'activity') {
+        const countA = (a.liveIdea?.volunteerCount || 0) + (a.liveIdea?.responseCount || 0);
+        const countB = (b.liveIdea?.volunteerCount || 0) + (b.liveIdea?.responseCount || 0);
+        return countB - countA;
+      }
+      // 'saved-desc':
+      return new Date(b.bookmark.createdAt).getTime() - new Date(a.bookmark.createdAt).getTime();
+    });
+  }, [resolvedBookmarks, savedSearchQuery, savedTrackFilter, savedCategoryFilter, savedSort]);
 
   if (!authReady) return <RouteSkeleton />;
   if (!user) {
@@ -564,9 +702,7 @@ export const ProfilePage: React.FC = () => {
         <div className="bg-surface-container-low border border-primary/40 rounded-2xl p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md shadow-md">
           <div className="flex items-start gap-3">
             <span className="w-10 h-10 rounded-xl bg-primary-container/20 text-primary flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-[22px]" aria-hidden="true">
-                admin_panel_settings
-              </span>
+              <Shield className="w-5 h-5" aria-hidden="true" />
             </span>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -588,9 +724,7 @@ export const ProfilePage: React.FC = () => {
             to="/admin"
             className="min-h-[44px] px-5 rounded-lg bg-primary-container text-on-primary font-title-md text-title-md font-semibold inline-flex items-center justify-center gap-2 shrink-0"
           >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
-              dashboard
-            </span>
+            <LayoutDashboard className="w-4 h-4" aria-hidden="true" />
             <span>Open Admin Panel</span>
           </Link>
         </div>
@@ -604,9 +738,7 @@ export const ProfilePage: React.FC = () => {
           className="bg-surface-container-low border-l-4 border-primary rounded-2xl p-space-lg flex flex-col sm:flex-row sm:items-center justify-between gap-space-md"
         >
           <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined text-primary text-[24px] mt-0.5">
-              mark_email_unread
-            </span>
+            <Mail className="w-6 h-6 text-primary shrink-0 mt-0.5" />
             <div>
               <h2 className="font-title-md text-title-md text-on-surface font-semibold">
                 Verify your email address ({user.email || 'unverified'})
@@ -698,7 +830,7 @@ export const ProfilePage: React.FC = () => {
                 onClick={handleSignOut}
                 className="min-h-[44px] px-4 rounded-lg bg-surface-container-high hover:bg-surface-bright text-on-surface-variant hover:text-on-surface font-title-md text-title-md flex items-center gap-1.5"
               >
-                <span className="material-symbols-outlined text-[18px]">logout</span>
+                <LogOut className="w-4 h-4" />
                 Sign Out
               </button>
             </div>
@@ -783,7 +915,7 @@ export const ProfilePage: React.FC = () => {
                   />
                   <div className="flex items-center justify-between gap-2">
                     <label className="min-h-[36px] px-3 rounded-lg bg-surface-container-high hover:bg-surface-bright text-on-surface-variant hover:text-on-surface font-code-sm text-code-sm inline-flex items-center gap-1.5 cursor-pointer">
-                      <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                      <Upload className="w-4 h-4" />
                       <span>Upload PNG/JPG/WebP</span>
                       <input
                         type="file"
@@ -825,17 +957,13 @@ export const ProfilePage: React.FC = () => {
           {/* Unique Username Management Card */}
           <div className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-sm border border-surface-variant/30">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-secondary text-[20px]">
-                alternate_email
-              </span>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">
+              <AtSign className="w-5 h-5 text-secondary" />
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
                 Unique Maker Handle
               </h2>
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant">
-              Usernames are normalized lowercase, globally unique in Firestore (
-              <code>usernames/&#123;handle&#125;</code>), and protected against reserved system
-              names.
+              Your handle is unique and shown on your ideas. Letters, numbers, and hyphens only.
             </p>
             <form onSubmit={handleChangeUsername} className="flex flex-col gap-space-sm pt-1">
               <div className="relative">
@@ -850,7 +978,7 @@ export const ProfilePage: React.FC = () => {
               </div>
               {usernameStatus === 'checking' && (
                 <span className="font-code-sm text-code-sm text-on-surface-variant">
-                  Checking availability in registry...
+                  Checking availability...
                 </span>
               )}
               {usernameStatus === 'available' && (
@@ -880,8 +1008,8 @@ export const ProfilePage: React.FC = () => {
           {/* Account Deletion & Data Lifecycle Card */}
           <div className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-sm border border-error/30">
             <div className="flex items-center gap-2 text-error">
-              <span className="material-symbols-outlined text-[20px]">shield_person</span>
-              <h2 className="font-headline-sm text-headline-sm text-on-surface">
+              <ShieldAlert className="w-5 h-5 text-error" />
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
                 Account &amp; Data Lifecycle
               </h2>
             </div>
@@ -915,52 +1043,192 @@ export const ProfilePage: React.FC = () => {
 
         {/* Right Column: Saved Ideas (Bookmarks), My Ideas, Volunteering, Connections */}
         <div className="lg:col-span-7 flex flex-col gap-space-lg">
-          {/* Saved Ideas / Bookmarks */}
+          {/* Saved Ideas / Bookmarks Section */}
           <section
-            id="saved-bookmarks"
-            className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-md border border-surface-variant/30"
+            id="saved-ideas"
+            className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-md border border-surface-variant/30 scroll-mt-24 shadow-sm"
           >
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[22px]">
-                  bookmarks
+            {/* Anchor for backward compatibility */}
+            <span id="saved-bookmarks" className="sr-only" />
+
+            {/* Section Header */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <span className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                  <Bookmark className="w-5 h-5 text-primary" />
                 </span>
-                <h2 className="font-headline-sm text-headline-sm text-on-surface">
-                  Saved Ideas ({savedBookmarks.length})
-                </h2>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                      Saved Ideas
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-primary-container text-on-primary font-code-sm text-[12px] font-bold">
+                      {savedBookmarks.length}
+                    </span>
+                  </div>
+                  <p className="font-body-sm text-[13px] text-on-surface-variant mt-0.5">
+                    Revisit, follow progress, or volunteer on your favorite ideas.
+                  </p>
+                </div>
               </div>
+
               <Link
                 to="/explore"
-                className="min-h-[38px] px-3.5 rounded-lg bg-surface-container-high hover:bg-surface-bright text-secondary font-code-sm text-code-sm inline-flex items-center gap-1 transition-colors"
+                className="min-h-[40px] px-4 rounded-lg bg-surface-container-high hover:bg-surface-bright text-secondary font-title-md text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors shrink-0"
               >
-                <span className="material-symbols-outlined text-[16px]">explore</span>
-                Discover Ideas
+                <Compass className="w-4 h-4" />
+                <span>Discover Ideas</span>
               </Link>
             </div>
 
+            {/* Search, Filter & Sort Toolbar (visible if user has saved ideas) */}
+            {resolvedBookmarks.length > 0 && (
+              <div className="flex flex-col gap-2.5 pt-1 border-t border-surface-variant/20">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant w-4 h-4 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={savedSearchQuery}
+                      onChange={(e) => setSavedSearchQuery(e.target.value)}
+                      placeholder="Search saved ideas by title, summary, note, or tag..."
+                      className="w-full h-10 pl-9 pr-8 rounded-lg bg-surface-container text-on-surface placeholder:text-on-surface-variant/60 font-body-sm text-[13px] border border-surface-variant/30 focus:outline-none focus:border-primary"
+                    />
+                    {savedSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSavedSearchQuery('')}
+                        aria-label="Clear search"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={savedSort}
+                    onChange={(e) => setSavedSort(e.target.value as any)}
+                    aria-label="Sort saved ideas"
+                    className="h-10 px-3 rounded-lg bg-surface-container text-on-surface font-body-sm text-[13px] border border-surface-variant/30 focus:outline-none"
+                  >
+                    <option value="saved-desc">Recently Saved</option>
+                    <option value="title">Alphabetical (A-Z)</option>
+                    <option value="activity">Most Active</option>
+                  </select>
+                </div>
+
+                {/* Filter chips (Track & Category) */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+                  <span className="text-on-surface-variant font-medium mr-1">Filter:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSavedTrackFilter('all');
+                      setSavedCategoryFilter('all');
+                    }}
+                    className={`min-h-[28px] px-2.5 rounded-full font-label-md transition-colors ${
+                      savedTrackFilter === 'all' && savedCategoryFilter === 'all'
+                        ? 'bg-primary-container text-on-primary font-semibold'
+                        : 'bg-surface-container text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    All ({resolvedBookmarks.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSavedTrackFilter(savedTrackFilter === 'guidance' ? 'all' : 'guidance')
+                    }
+                    className={`min-h-[28px] px-2.5 rounded-full font-label-md transition-colors ${
+                      savedTrackFilter === 'guidance'
+                        ? 'bg-secondary text-on-secondary font-semibold'
+                        : 'bg-surface-container text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    Needs Guidance
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSavedTrackFilter(savedTrackFilter === 'builder' ? 'all' : 'builder')
+                    }
+                    className={`min-h-[28px] px-2.5 rounded-full font-label-md transition-colors ${
+                      savedTrackFilter === 'builder'
+                        ? 'bg-primary-container text-on-primary font-semibold'
+                        : 'bg-surface-container text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    Needs a Builder
+                  </button>
+                  {savedCategories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() =>
+                        setSavedCategoryFilter(savedCategoryFilter === cat ? 'all' : cat)
+                      }
+                      className={`min-h-[28px] px-2.5 rounded-full font-label-md transition-colors capitalize ${
+                        savedCategoryFilter === cat
+                          ? 'bg-primary-container text-on-primary font-semibold'
+                          : 'bg-surface-container text-on-surface-variant hover:text-on-surface'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* List / Empty States */}
             {resolvedBookmarks.length === 0 ? (
-              <div className="p-space-lg rounded-xl bg-surface-container flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
-                <div className="flex flex-col gap-1">
-                  <p className="font-title-md text-title-md text-on-surface">
-                    No bookmarked specifications yet
-                  </p>
-                  <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Click the bookmark icon on any idea card or specification page to save
-                    interesting concepts here for quick access.
+              <div className="p-8 rounded-xl bg-surface-container flex flex-col items-center justify-center text-center gap-3">
+                <span className="w-14 h-14 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+                  <Bookmark className="w-7 h-7" />
+                </span>
+                <div className="max-w-md">
+                  <h3 className="font-title-lg text-title-lg font-semibold text-on-surface">
+                    No saved ideas yet
+                  </h3>
+                  <p className="font-body-md text-[14px] text-on-surface-variant mt-1 leading-relaxed">
+                    Whenever you find an interesting idea on Synapse, click the bookmark icon to save it here so you can easily revisit, track updates, or offer help.
                   </p>
                 </div>
                 <Link
                   to="/explore"
-                  className="min-h-[40px] px-4 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md inline-flex items-center justify-center gap-1 shrink-0"
+                  className="mt-2 min-h-[44px] px-5 rounded-lg bg-primary-container text-on-primary font-title-md text-[14px] font-semibold inline-flex items-center gap-2 hover:opacity-90 transition-opacity"
                 >
-                  Browse Registry →
+                  <Compass className="w-4 h-4" />
+                  <span>Browse Ideas</span>
                 </Link>
               </div>
+            ) : filteredSavedBookmarks.length === 0 ? (
+              <div className="p-6 rounded-xl bg-surface-container text-center flex flex-col items-center gap-2">
+                <p className="font-title-md text-on-surface font-medium">
+                  No saved ideas matched your filter
+                </p>
+                <p className="font-body-sm text-[13px] text-on-surface-variant">
+                  Try adjusting your search terms or clearing active filters.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSavedSearchQuery('');
+                    setSavedTrackFilter('all');
+                    setSavedCategoryFilter('all');
+                  }}
+                  className="mt-1 px-3 py-1.5 rounded-lg bg-surface-container-high text-primary hover:underline text-[13px] font-medium"
+                >
+                  Clear filters
+                </button>
+              </div>
             ) : (
-              <div className="flex flex-col gap-space-sm">
-                {resolvedBookmarks.map(({ bookmark, liveIdea }) => {
+              <div className="flex flex-col gap-3">
+                {filteredSavedBookmarks.map(({ bookmark, liveIdea }) => {
                   const title = liveIdea?.title || bookmark.ideaTitle;
-                  const summary = liveIdea?.summary || bookmark.ideaSummary;
+                  const problemLine =
+                    liveIdea?.problem?.trim() || liveIdea?.summary || bookmark.ideaSummary;
                   const category = liveIdea?.category || bookmark.ideaCategory;
                   const helpTrack = liveIdea?.helpTrack || bookmark.ideaHelpTrack;
                   const isEditingNote = editingBookmarkId === bookmark.ideaId;
@@ -969,84 +1237,103 @@ export const ProfilePage: React.FC = () => {
                   return (
                     <div
                       key={bookmark.id}
-                      className="p-space-md rounded-xl bg-surface-container flex flex-col gap-space-sm border border-surface-variant/20 hover:border-surface-variant/50 transition-colors"
+                      className="p-space-md rounded-xl bg-surface-container flex flex-col gap-3 border border-surface-variant/20 hover:border-surface-variant/50 transition-colors shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-space-md">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                          {/* Tags row */}
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-code-sm text-[11px] uppercase">
+                            <span className="px-2.5 py-0.5 rounded-full bg-surface-container-highest text-on-surface font-label-md text-[12px] uppercase">
                               {category}
                             </span>
                             <span
-                              className={`px-2 py-0.5 rounded-full font-code-sm text-[11px] uppercase ${
+                              className={`px-2.5 py-0.5 rounded-full font-label-md text-[12px] font-medium ${
                                 helpTrack === 'builder'
-                                  ? 'bg-primary/15 text-primary'
-                                  : 'bg-tertiary/15 text-tertiary'
+                                  ? 'bg-primary-container/20 text-primary'
+                                  : 'bg-secondary/15 text-secondary'
                               }`}
                             >
-                              {helpTrack === 'builder' ? 'Needs Builder' : 'Needs Guidance'}
+                              {helpTrack === 'builder' ? 'Needs a Builder' : 'Needs Guidance'}
                             </span>
                             {liveIdea ? (
-                              <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-code-sm text-[11px] capitalize">
-                                {liveIdea.status.replace('-', ' ')}
+                              <span className="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-[12px] capitalize flex items-center gap-1">
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    liveIdea.status === 'open'
+                                      ? 'bg-primary'
+                                      : liveIdea.status === 'in-progress'
+                                      ? 'bg-secondary'
+                                      : 'bg-tertiary'
+                                  }`}
+                                />
+                                <span>{liveIdea.status.replace('-', ' ')}</span>
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-code-sm text-[11px] uppercase">
-                                Specification Removed
+                              <span className="px-2.5 py-0.5 rounded-full bg-error-container text-on-error-container font-label-md text-[12px] uppercase font-semibold">
+                                Idea Removed
                               </span>
                             )}
-                            <span className="font-code-sm text-code-sm text-on-surface-variant/80">
+                            <span className="font-code-sm text-[12px] text-on-surface-variant/80">
                               · Saved {formatRelativeTime(bookmark.createdAt)}
                             </span>
                           </div>
 
-                          {isDeletedTarget ? (
-                            <span className="font-title-md text-title-md text-on-surface-variant line-through mt-0.5">
-                              {title}
-                            </span>
-                          ) : (
-                            <Link
-                              to={`/ideas/${bookmark.ideaId}`}
-                              className="font-title-md text-title-md text-on-surface hover:text-primary transition-colors mt-0.5"
-                            >
-                              {title}
-                            </Link>
-                          )}
-                          <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2">
+                          {/* Idea Title & Author */}
+                          <div className="mt-0.5">
+                            {isDeletedTarget ? (
+                              <span className="font-title-lg text-title-lg text-on-surface-variant line-through font-semibold">
+                                {title}
+                              </span>
+                            ) : (
+                              <Link
+                                to={`/ideas/${bookmark.ideaId}`}
+                                className="font-title-lg text-title-lg text-on-surface hover:text-primary transition-colors font-semibold leading-snug"
+                              >
+                                {title}
+                              </Link>
+                            )}
+                            {liveIdea?.authorUsername && (
+                              <span className="ml-2 font-body-sm text-[13px] text-on-surface-variant">
+                                by @{liveIdea.authorUsername}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Problem statement / summary pitch */}
+                          <p className="font-body-md text-[14px] text-on-surface-variant line-clamp-2 leading-relaxed">
                             {isDeletedTarget
                               ? 'This idea was removed by its author or moderation. You can remove this saved bookmark whenever you like.'
-                              : summary}
+                              : problemLine}
                           </p>
+
+                          {/* Help Needed Tag (if present) */}
+                          {liveIdea?.helpWanted && (
+                            <div className="px-2.5 py-1.5 rounded-lg bg-surface-container-highest/60 text-[12px] text-on-surface-variant flex items-center gap-1.5">
+                              <Handshake className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="truncate">
+                                <strong className="text-on-surface font-medium">Help needed: </strong>
+                                {liveIdea.helpWanted}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
+                        {/* Top-Right Quick Actions */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {!isDeletedTarget && (
-                            <Link
-                              to={`/ideas/${bookmark.ideaId}`}
-                              className="min-h-[36px] px-3 rounded-lg bg-surface-container-high hover:bg-surface-bright text-secondary font-code-sm text-code-sm inline-flex items-center gap-1 transition-colors"
-                            >
-                              Open
-                              <span className="material-symbols-outlined text-[15px]">
-                                arrow_forward
-                              </span>
-                            </Link>
-                          )}
                           <button
                             type="button"
                             onClick={() => handleRemoveBookmark(bookmark.ideaId, title)}
                             title="Remove from saved ideas"
-                            aria-label={`Remove ${title} from saved ideas`}
-                            className="min-w-[36px] min-h-[36px] px-2 rounded-lg bg-surface-container-high hover:bg-error-container text-on-surface-variant hover:text-on-error-container flex items-center justify-center gap-1 transition-colors font-code-sm text-code-sm"
+                            aria-label={`Remove "${title}" from saved ideas`}
+                            className="min-w-[36px] min-h-[36px] px-2 rounded-lg bg-surface-container-high hover:bg-error-container text-on-surface-variant hover:text-on-error-container flex items-center justify-center gap-1 transition-colors font-code-sm text-[13px]"
                           >
-                            <span className="material-symbols-outlined text-[17px]">
-                              bookmark_remove
-                            </span>
+                            <BookmarkX className="w-4 h-4" />
                             {isDeletedTarget && <span>Clear</span>}
                           </button>
                         </div>
                       </div>
 
-                      {/* Personal Quick-Access Note */}
+                      {/* Personal Note Callout or Editor */}
                       {isEditingNote ? (
                         <div className="pt-2 border-t border-surface-variant/20 flex flex-col gap-2">
                           <input
@@ -1054,55 +1341,100 @@ export const ProfilePage: React.FC = () => {
                             maxLength={500}
                             value={bookmarkNoteDraft}
                             onChange={(e) => setBookmarkNoteDraft(e.target.value)}
-                            placeholder="Add a personal note (e.g., why you saved this or how you might help)..."
-                            className="w-full h-10 px-3 rounded-lg bg-surface-container-highest text-on-surface font-body-sm text-body-sm focus:outline-none focus:ring-1 focus:ring-primary-container"
+                            placeholder="Add a personal note (e.g. why you saved this or how you might help)..."
+                            className="w-full h-10 px-3 rounded-lg bg-surface-container-highest text-on-surface font-body-sm text-[13px] focus:outline-none focus:ring-1 focus:ring-primary-container"
                           />
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditingBookmarkId(null)}
-                              className="min-h-[32px] px-3 rounded-lg text-on-surface-variant font-code-sm text-code-sm hover:text-on-surface"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              disabled={savingNote}
-                              onClick={() => handleSaveBookmarkNote(bookmark.ideaId)}
-                              className="min-h-[32px] px-3.5 rounded-lg bg-primary-container text-on-primary font-code-sm text-code-sm"
-                            >
-                              {savingNote ? 'Saving...' : 'Save Note'}
-                            </button>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-code-sm text-[11px] text-on-surface-variant">
+                              {bookmarkNoteDraft.length}/500
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingBookmarkId(null)}
+                                className="min-h-[32px] px-3 rounded-lg text-on-surface-variant font-code-sm text-[13px] hover:text-on-surface"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingNote}
+                                onClick={() => handleSaveBookmarkNote(bookmark.ideaId)}
+                                className="min-h-[32px] px-3.5 rounded-lg bg-primary-container text-on-primary font-code-sm text-[13px] font-semibold"
+                              >
+                                {savingNote ? 'Saving...' : 'Save Note'}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ) : (
-                        <div className="pt-1.5 border-t border-surface-variant/20 flex items-center justify-between gap-2">
-                          {bookmark.note ? (
-                            <p className="font-code-sm text-code-sm text-on-surface-variant flex items-center gap-1.5">
-                              <span className="material-symbols-outlined text-[15px] text-primary">
-                                sticky_note_2
-                              </span>
-                              <span>{bookmark.note}</span>
-                            </p>
-                          ) : (
-                            <span className="font-code-sm text-code-sm text-on-surface-variant/60">
-                              {liveIdea
-                                ? `${liveIdea.volunteerCount} volunteers · ${liveIdea.responseCount} responses · ${liveIdea.connectionCount} connections`
-                                : 'Target idea no longer active'}
-                            </span>
-                          )}
-                          {!isDeletedTarget && (
+                        bookmark.note && (
+                          <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <StickyNote className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                              <p className="font-body-sm text-[13px] text-on-surface leading-snug break-words">
+                                <strong className="text-amber-500 font-medium">My note: </strong>
+                                {bookmark.note}
+                              </p>
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleStartEditNote(bookmark.ideaId, bookmark.note)}
-                              className="font-code-sm text-code-sm text-secondary hover:underline inline-flex items-center gap-1 shrink-0"
+                              title="Edit personal note"
+                              aria-label="Edit personal note"
+                              className="text-on-surface-variant hover:text-on-surface shrink-0"
                             >
-                              <span className="material-symbols-outlined text-[14px]">edit_note</span>
-                              {bookmark.note ? 'Edit note' : 'Add personal note'}
+                              <Edit3 className="w-4 h-4" />
                             </button>
+                          </div>
+                        )
+                      )}
+
+                      {/* Card Bottom: Activity stats & View Idea button */}
+                      <div className="pt-2 border-t border-surface-variant/20 flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-3 text-[13px] text-on-surface-variant">
+                          {liveIdea ? (
+                            <>
+                              <span className="flex items-center gap-1" title="Volunteers">
+                                <Users className="w-3.5 h-3.5" />
+                                <span>{liveIdea.volunteerCount}</span>
+                              </span>
+                              <span className="flex items-center gap-1" title="Connected ideas">
+                                <Network className="w-3.5 h-3.5" />
+                                <span>{liveIdea.connectionCount}</span>
+                              </span>
+                              <span className="flex items-center gap-1" title="Responses">
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                <span>{liveIdea.responseCount}</span>
+                              </span>
+                            </>
+                          ) : (
+                            <span>Idea no longer active</span>
                           )}
                         </div>
-                      )}
+
+                        <div className="flex items-center gap-2">
+                          {!isDeletedTarget && !bookmark.note && !isEditingNote && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditNote(bookmark.ideaId, bookmark.note)}
+                              className="font-code-sm text-[12px] text-on-surface-variant hover:text-secondary inline-flex items-center gap-1"
+                            >
+                              <FileEdit className="w-3.5 h-3.5" />
+                              Add note
+                            </button>
+                          )}
+                          {!isDeletedTarget && (
+                            <Link
+                              to={`/ideas/${bookmark.ideaId}`}
+                              className="min-h-[36px] px-3.5 rounded-lg bg-primary-container text-on-primary font-title-md text-[13px] font-semibold inline-flex items-center gap-1 hover:opacity-90 transition-opacity"
+                            >
+                              <span>View idea</span>
+                              <ArrowRight className="w-4 h-4" />
+                            </Link>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -1123,13 +1455,13 @@ export const ProfilePage: React.FC = () => {
                 to="/post/basics"
                 className="min-h-[40px] px-4 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md inline-flex items-center gap-1"
               >
-                <span className="material-symbols-outlined text-[16px]">add</span>
+                <Plus className="w-4 h-4" />
                 Post Idea
               </Link>
             </div>
             {myIdeas.length === 0 ? (
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                You haven’t posted any ideas yet. Share your first specification whenever you’re
+                You haven’t posted any ideas yet. Share your first idea whenever you’re
                 ready.
               </p>
             ) : (
@@ -1149,12 +1481,7 @@ export const ProfilePage: React.FC = () => {
                         </Link>
                         {idea.adminVerified && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary font-code-sm text-[10px] font-semibold uppercase">
-                            <span
-                              className="material-symbols-outlined text-[13px]"
-                              aria-hidden="true"
-                            >
-                              verified
-                            </span>
+                            <CheckCircle2 className="w-3 h-3 text-secondary" />
                             Admin Verified
                           </span>
                         )}
@@ -1238,12 +1565,11 @@ export const ProfilePage: React.FC = () => {
             className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-md"
           >
             <h2 className="font-headline-sm text-headline-sm text-on-surface">
-              My Linked Connections ({myConnections.length})
+              My Idea Connections {myConnections.length > 0 && `(${myConnections.length})`}
             </h2>
             {myConnections.length === 0 ? (
-              <p className="font-body-sm text-body-sm text-on-surface-variant">
-                No cross-linked ideas yet. Connect complementary specs on any idea page or the
-                Constellation Map.
+              <p className="font-body-sm text-[13px] text-on-surface-variant">
+                No connected ideas yet. Connect related ideas on any idea page or the Idea Map.
               </p>
             ) : (
               <div className="flex flex-col gap-space-sm">
@@ -1296,17 +1622,6 @@ export const PublicUserProfilePage: React.FC = () => {
 
   useEffect(() => {
     if (!username) return;
-    if (username === 'founder') {
-      setFetchedProfile({
-        uid: 'founder',
-        displayName: 'Solo Maker & Curator',
-        username: 'founder',
-        bio: 'Builder of Synapse. Authoring open starter specifications for the community.',
-        createdAt: '2026-09-24T00:00:00.000Z',
-        updatedAt: '2026-09-24T00:00:00.000Z',
-      });
-      return;
-    }
     if (username === 'deleted-member') {
       setFetchedProfile({
         uid: 'deleted-member',
@@ -1319,20 +1634,46 @@ export const PublicUserProfilePage: React.FC = () => {
       });
       return;
     }
+    const lower = username.toLowerCase();
+    if (lower === 'admin' || lower === 'cardboardboxmask') {
+      setFetchedProfile({
+        uid: SOLE_ADMIN_UID,
+        displayName: 'Platform Admin',
+        username: 'admin',
+        bio: 'Curator & Administrator for Synapse. Championing community problems, real-world builder matchmaking, and verified project specifications.',
+        accountStatus: 'active',
+        createdAt: '2026-09-01T00:00:00.000Z',
+        updatedAt: '2026-09-01T00:00:00.000Z',
+      });
+      return;
+    }
     const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()));
     getDocs(q)
       .then((snap) => {
         if (!snap.empty) {
           setFetchedProfile(snap.docs[0].data() as UserProfile);
+        } else {
+          setFetchedProfile(null);
         }
       })
       .catch(() => {});
   }, [username]);
 
-  const userIdeas = useMemo(
-    () => ideas.filter((i) => i.authorUsername.toLowerCase() === (username || '').toLowerCase()),
-    [ideas, username]
-  );
+  const userIdeas = useMemo(() => {
+    const lower = (username || '').toLowerCase();
+    return ideas.filter((i) => {
+      const authorLower = (i.authorUsername || '').toLowerCase();
+      if (lower === 'admin' || lower === 'cardboardboxmask') {
+        return (
+          authorLower === 'admin' ||
+          authorLower === 'cardboardboxmask' ||
+          i.authorId === SOLE_ADMIN_UID ||
+          i.authorUid === SOLE_ADMIN_UID
+        );
+      }
+      return authorLower === lower;
+    });
+  }, [ideas, username]);
 
   const userConnections = useMemo(() => {
     if (!fetchedProfile) return [];
@@ -1379,7 +1720,7 @@ export const PublicUserProfilePage: React.FC = () => {
           </div>
         </div>
 
-        {username && username !== 'founder' && username !== 'deleted-member' && (
+        {username && username !== 'deleted-member' && (
           <button
             type="button"
             onClick={() =>
@@ -1391,7 +1732,7 @@ export const PublicUserProfilePage: React.FC = () => {
             }
             className="min-h-[40px] px-3.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-error font-code-sm text-code-sm inline-flex items-center gap-1.5 self-start sm:self-auto"
           >
-            <span className="material-symbols-outlined text-[16px]">flag</span>
+            <Flag className="w-4 h-4" />
             <span>Report Profile</span>
           </button>
         )}
@@ -1399,11 +1740,11 @@ export const PublicUserProfilePage: React.FC = () => {
 
       <div className="flex flex-col gap-space-md">
         <h2 className="font-headline-sm text-headline-sm text-on-surface">
-          Published Specifications ({userIdeas.length})
+          Published Ideas ({userIdeas.length})
         </h2>
         {userIdeas.length === 0 ? (
           <div className="bg-surface-container-low rounded-2xl p-10 text-center text-on-surface-variant">
-            No public specifications published by @{username} yet.
+            No public ideas published by @{username} yet.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
@@ -1421,17 +1762,15 @@ export const PublicUserProfilePage: React.FC = () => {
                       </span>
                       {idea.adminVerified && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary/15 text-secondary font-code-sm text-[10px] font-semibold uppercase">
-                          <span
-                            className="material-symbols-outlined text-[13px]"
-                            aria-hidden="true"
-                          >
-                            verified
-                          </span>
+                          <CheckCircle2 className="w-3 h-3 text-secondary" />
                           Admin Verified
                         </span>
                       )}
                     </div>
-                    <BookmarkButton idea={idea} variant="icon" />
+                    <div className="flex items-center gap-1">
+                      <BookmarkButton idea={idea} variant="icon" />
+                      <IdeaCardOverflowMenu idea={idea} />
+                    </div>
                   </div>
                   <Link to={`/ideas/${idea.id}`}>
                     <h3 className="font-headline-sm text-headline-sm text-on-surface hover:text-primary mt-1 transition-colors">

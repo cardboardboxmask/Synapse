@@ -232,7 +232,7 @@ export async function fetchIdeasCursorPage(params: {
       id: d.id,
       ...(d.data() as Omit<Idea, 'id'>),
     }))
-    .filter((i) => !i.deletedAt);
+    .filter((i) => !i.deletedAt && !i.isSeed && !i.id.startsWith('seed-'));
 
   return {
     ideas,

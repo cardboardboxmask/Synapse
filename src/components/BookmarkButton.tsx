@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Idea } from '../types/synapse';
 
@@ -14,9 +14,7 @@ export const BookmarkButton: React.FC<BookmarkButtonProps> = ({
   variant = 'icon',
   className = '',
 }) => {
-  const { user, isBookmarked, toggleBookmark, showToast } = useApp();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const { isBookmarked, toggleBookmark } = useApp();
   const [busy, setBusy] = useState(false);
 
   const saved = isBookmarked(idea.id);
@@ -24,12 +22,6 @@ export const BookmarkButton: React.FC<BookmarkButtonProps> = ({
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
-    if (!user) {
-      showToast('Sign in with Google to save ideas to your profile.', 'info');
-      navigate(`/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
-      return;
-    }
 
     if (busy) return;
     setBusy(true);
@@ -54,9 +46,11 @@ export const BookmarkButton: React.FC<BookmarkButtonProps> = ({
             : 'bg-surface-container hover:bg-surface-container-high text-on-surface'
         } ${className}`}
       >
-        <span className="material-symbols-outlined text-[18px]">
-          {saved ? 'bookmark_added' : 'bookmark'}
-        </span>
+        {saved ? (
+          <BookmarkCheck className="w-4 h-4 text-primary" aria-hidden="true" />
+        ) : (
+          <Bookmark className="w-4 h-4 text-on-surface-variant" aria-hidden="true" />
+        )}
         <span>{saved ? 'Saved' : 'Bookmark'}</span>
       </button>
     );
@@ -76,9 +70,11 @@ export const BookmarkButton: React.FC<BookmarkButtonProps> = ({
           : 'bg-surface-container-high/70 hover:bg-surface-bright text-on-surface-variant hover:text-on-surface'
       } ${className}`}
     >
-      <span className="material-symbols-outlined text-[19px]">
-        {saved ? 'bookmark_added' : 'bookmark'}
-      </span>
+      {saved ? (
+        <BookmarkCheck className="w-4 h-4 text-primary" aria-hidden="true" />
+      ) : (
+        <Bookmark className="w-4 h-4 text-on-surface-variant" aria-hidden="true" />
+      )}
     </button>
   );
 };

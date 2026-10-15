@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import {
   collection,
@@ -31,8 +31,10 @@ import {
   signInWithGoogle,
   signOutUser,
   updateBookmarkNote,
+  seedInitialIdeasIfNeeded,
+  SOLE_ADMIN_UID,
+  SOLE_ADMIN_EMAIL,
 } from '../firebase';
-import { SEED_IDEAS } from '../data/seedIdeas';
 import {
   DRAFT_SCHEMA_VERSION,
   Idea,
@@ -68,6 +70,29 @@ export interface ConfirmDialogState {
 
 const DRAFT_STORAGE_KEY_V2 = 'synapse_post_draft_v2';
 const LEGACY_DRAFT_STORAGE_KEY = 'synapse_post_draft';
+const GUEST_BOOKMARKS_STORAGE_KEY = 'synapse_guest_saved_bookmarks';
+
+function loadGuestBookmarks(): SavedBookmark[] {
+  try {
+    const raw = localStorage.getItem(GUEST_BOOKMARKS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((b) => b && typeof b.ideaId === 'string');
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function saveGuestBookmarksToStorage(bookmarks: SavedBookmark[]) {
+  try {
+    localStorage.setItem(GUEST_BOOKMARKS_STORAGE_KEY, JSON.stringify(bookmarks));
+  } catch {
+    // ignore
+  }
+}
 
 export const INITIAL_POST_DRAFT: PostIdeaDraft = {
   schemaVersion: DRAFT_SCHEMA_VERSION,
@@ -214,7 +239,7 @@ interface AppContextValue {
   resetDraft: () => void;
   simulateZeroState: boolean;
   setSimulateZeroState: (val: boolean) => void;
-  theme: 'dark' | 'light';
+  theme: 'light' | 'dark';
   toggleTheme: () => void;
   toasts: ToastItem[];
   showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
@@ -223,15 +248,15 @@ interface AppContextValue {
   openReportModal: (target: ReportModalTarget) => void;
   closeReportModal: () => void;
   confirmDialog: ConfirmDialogState | null;
-  openConfirm: (dialog: ConfirmDialogState) => void;
-  requestConfirm: (dialog: ConfirmDialogState) => void;
+  openConfirm: (state: ConfirmDialogState) => void;
+  requestConfirm: (state: ConfirmDialogState) => void;
   closeConfirm: () => void;
   refreshProfile: () => Promise<void>;
   adminReauth: AdminReauthSession | null;
   isAdminUnlocked: boolean;
   isAdminFreshForDestructive: boolean;
   adminSessionRemainingMs: number;
-  adminLockReason: 'none' | 'timeout' | 'manual';
+  adminLockReason: string | null;
   completeAdminSecurityVerification: (params: {
     reauthCompletedAt: number;
     receipt: WebAuthnVerificationReceipt;
@@ -240,7 +265,298 @@ interface AppContextValue {
   lockAdminPanel: (reason?: 'manual' | 'timeout' | 'security') => Promise<void>;
 }
 
-const AppContext = createContext<AppContextValue | undefined>(undefined);
+export const AppContext = createContext<AppContextValue | null>(null);
+
+const DEFAULT_SEED_IDEAS: any[] = [
+  {
+    id: 'seed-bus-tracker',
+    title: 'Bus arrival tracker for small-town routes',
+    summary: 'Students in tier-2 cities wait at stops with no idea when the bus will arrive, because big transit apps don’t cover local buses.',
+    problem: 'Students in tier-2 cities wait at stops with no idea when the bus will arrive, because big transit apps don’t cover local buses.',
+    solution: 'A crowd-sourced web app where daily commuters tap "bus spotted here" to share live GPS coordinates and arrival estimates for local bus routes.',
+    helpWanted: 'A builder for a simple crowd-sourced “bus spotted here” web app and real-time map feed.',
+    helpTrack: 'builder',
+    category: 'Web',
+    license: 'cc-by',
+    tags: ['transport', 'students', 'crowdsourced'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 4 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-exam-tracker',
+    title: 'Exam timetable and syllabus tracker for college students',
+    summary: 'Students juggle unit-wise syllabus, internals, and arrears subjects across scattered notes and WhatsApp groups.',
+    problem: 'Students juggle unit-wise syllabus, internals, and arrears subjects across scattered notes and WhatsApp groups.',
+    solution: 'A centralized dashboard for college students to track unit-wise syllabus completion, upcoming internals, and exam schedules.',
+    helpWanted: 'Feedback on what a student would actually use daily, and a builder for the first version.',
+    helpTrack: 'guidance',
+    category: 'Web',
+    license: 'mit',
+    tags: ['education', 'students', 'productivity'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'in-progress',
+    createdAt: new Date(Date.now() - 3.5 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 3.5 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-offline-notes',
+    title: 'Offline-first note sharing for areas with poor internet',
+    summary: 'Students in low-connectivity areas can’t reliably download study material shared online.',
+    problem: 'Students in low-connectivity areas can’t reliably download study material shared online.',
+    solution: 'A progressive web app (PWA) with local caching and peer-to-peer sync over Wi-Fi direct or Bluetooth mesh for sharing study notes.',
+    helpWanted: 'Guidance on how to make a web app work offline (PWA caching, service workers, sync).',
+    helpTrack: 'guidance',
+    category: 'Software',
+    license: 'mit',
+    tags: ['offline', 'pwa', 'education'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-soil-moisture',
+    title: 'Low-cost soil moisture alert for small farmers',
+    summary: 'Small farmers overwater or underwater crops because they can’t measure soil moisture cheaply.',
+    problem: 'Small farmers overwater or underwater crops because they can’t measure soil moisture cheaply.',
+    solution: 'An Arduino/ESP32 based soil moisture sensor probe connected to a solar-powered GSM module that sends SMS alerts when irrigation is needed.',
+    helpWanted: 'A hardware builder (sensor + SMS or buzzer alert) and an advisor with farming experience.',
+    helpTrack: 'builder',
+    category: 'Hardware',
+    license: 'cc-by',
+    tags: ['agriculture', 'sensors', 'lowcost'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'in-progress',
+    createdAt: new Date(Date.now() - 2.5 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 2.5 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-blood-matching',
+    title: 'Local volunteer matching for blood donation',
+    summary: 'In emergencies, families spend hours phoning around to find a matching blood donor nearby.',
+    problem: 'In emergencies, families spend hours phoning around to find a matching blood donor nearby.',
+    solution: 'A privacy-first emergency blood donor directory that matches blood group and location securely without exposing phone numbers publicly.',
+    helpWanted: 'Advice on privacy and verification, plus a builder for a simple donor registry.',
+    helpTrack: 'guidance',
+    category: 'Web',
+    license: 'all-rights-kept',
+    tags: ['health', 'community', 'emergency'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-gov-summarizer',
+    title: 'Plain-language summary tool for government forms and notices',
+    summary: 'Many people can’t understand official notices, scheme forms, or legal letters, and don’t know what to do next.',
+    problem: 'Many people can’t understand official notices, scheme forms, or legal letters, and don’t know what to do next.',
+    solution: 'An AI-powered document simplifier that translates complex government scheme circulars into simple, actionable steps in local languages.',
+    helpWanted: 'An AI/NLP builder, and people who can check accuracy in Tamil and English.',
+    helpTrack: 'builder',
+    category: 'AI',
+    license: 'mit',
+    tags: ['accessibility', 'language', 'civic'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'built',
+    createdAt: new Date(Date.now() - 1.5 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 1.5 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-tool-library',
+    title: 'Shared tool library for a neighborhood',
+    summary: 'People buy drills, ladders, and other tools they use once, while neighbors own the same things sitting idle.',
+    problem: 'People buy drills, ladders, and other tools they use once, while neighbors own the same things sitting idle.',
+    solution: 'A hyper-local inventory board where residents list household tools available for lending or borrowing within 1 km.',
+    helpWanted: 'A builder for a simple lend/borrow board with item status and ratings.',
+    helpTrack: 'builder',
+    category: 'Web',
+    license: 'cc-by',
+    tags: ['sharing', 'community', 'sustainability'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-study-group',
+    title: 'Study group finder by subject and time',
+    summary: 'Students want to study with others on the same subject but only know people in their own class.',
+    problem: 'Students want to study with others on the same subject but only know people in their own class.',
+    solution: 'A scheduling widget where students input their course codes and free study windows to automatically form virtual or library study pods.',
+    helpWanted: 'Feedback on matching logic, and one builder for a prototype.',
+    helpTrack: 'guidance',
+    category: 'Software',
+    license: 'mit',
+    tags: ['students', 'collaboration'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 0.8 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 0.8 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-air-quality',
+    title: 'Low-cost air quality monitor for classrooms',
+    summary: 'Schools have no cheap way to measure air quality (CO2, dust), so poor ventilation goes unnoticed.',
+    problem: 'Schools have no cheap way to measure air quality (CO2, dust), so poor ventilation goes unnoticed.',
+    solution: 'An open-source ESP32 air quality monitor with an e-ink display showing CO2 levels and ventilation reminders for teachers.',
+    helpWanted: 'Advice on sensors (NDIR CO2) and calibration from anyone with electronics experience.',
+    helpTrack: 'guidance',
+    category: 'Hardware',
+    license: 'cc-by',
+    tags: ['esp32', 'sensors', 'education'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'in-progress',
+    createdAt: new Date(Date.now() - 0.6 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 0.6 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-voice-reminders',
+    title: 'Voice-based reminders for elderly family members',
+    summary: 'Older people forget medicines and appointments, and smartphone reminders are too fiddly for them.',
+    problem: 'Older people forget medicines and appointments, and smartphone reminders are too fiddly for them.',
+    solution: 'A simple voice-first reminder interface that speaks reminders aloud in regional languages and confirms completion with a single physical button press.',
+    helpWanted: 'A builder for a very simple voice reminder device or app, plus UX advice from anyone who has helped elderly relatives with technology.',
+    helpTrack: 'builder',
+    category: 'AI',
+    license: 'mit',
+    tags: ['elderly', 'voice', 'accessibility'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 0.4 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 0.4 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-beginner-board',
+    title: 'Beginner project ideas board for first-year engineering students',
+    summary: 'First-years want to build things but don’t know what’s realistic for their skill level.',
+    problem: 'First-years want to build things but don’t know what’s realistic for their skill level.',
+    solution: 'A curated repository of scoped engineering projects categorized by difficulty, required tools, and estimated completion time.',
+    helpWanted: 'Seniors who can suggest scoped projects, and a builder for a small curated list site.',
+    helpTrack: 'guidance',
+    category: 'Other',
+    license: 'mit',
+    tags: ['beginners', 'students', 'learning'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 0.25 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 0.25 * 86400000).toISOString(),
+  },
+  {
+    id: 'seed-warranty-org',
+    title: 'Receipt and warranty organizer',
+    summary: 'People lose bills and warranty cards, then can’t claim repairs when something breaks.',
+    problem: 'People lose bills and warranty cards, then can’t claim repairs when something breaks.',
+    solution: 'A lightweight mobile-first web app that snaps a photo of purchase receipts, extracts expiry dates with OCR, and sends push reminders before warranties expire.',
+    helpWanted: 'A builder for a simple app that stores a photo, purchase date, and warranty reminder.',
+    helpTrack: 'builder',
+    category: 'Software',
+    license: 'cc-by',
+    tags: ['utility', 'reminders'],
+    authorId: SOLE_ADMIN_UID,
+    authorUid: SOLE_ADMIN_UID,
+    authorUsername: 'admin',
+    authorName: 'Admin',
+    authorDisplayName: 'Admin',
+    adminVerified: true,
+    volunteerCount: 0,
+    connectionCount: 0,
+    responseCount: 0,
+    status: 'open',
+    createdAt: new Date(Date.now() - 0.1 * 86400000).toISOString(),
+    updatedAt: new Date(Date.now() - 0.1 * 86400000).toISOString(),
+  },
+];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -249,14 +565,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authReady, setAuthReady] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(() => isBrowserOnline());
 
-  const [rawIdeas, setRawIdeas] = useState<Idea[]>(SEED_IDEAS);
+  const [rawIdeas, setRawIdeas] = useState<Idea[]>([]);
   const [ideasLoading, setIdeasLoading] = useState(true);
   const [ideasError, setIdeasError] = useState<string | null>(null);
 
   const [connections, setConnections] = useState<IdeaConnection[]>([]);
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [reports, setReports] = useState<ModerationReport[]>([]);
-  const [savedBookmarks, setSavedBookmarks] = useState<SavedBookmark[]>([]);
+  const [savedBookmarks, setSavedBookmarks] = useState<SavedBookmark[]>(() => loadGuestBookmarks());
   const [simulateZeroState, setSimulateZeroState] = useState(false);
 
   // Versioned Post Wizard Draft State
@@ -376,6 +692,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ]);
           setProfile(prof);
           setIsAdmin(adminFlag);
+
+          // Asynchronously migrate any guest bookmarks created before authentication
+          const guestBookmarks = loadGuestBookmarks();
+          if (guestBookmarks.length > 0) {
+            try {
+              for (const b of guestBookmarks) {
+                const syntheticIdea: Idea = {
+                  id: b.ideaId,
+                  title: b.ideaTitle,
+                  summary: b.ideaSummary,
+                  problem: '',
+                  solution: '',
+                  helpWanted: '',
+                  category: b.ideaCategory,
+                  tags: [],
+                  helpTrack: b.ideaHelpTrack,
+                  status: 'open',
+                  license: 'cc-by',
+                  authorId: '',
+                  authorName: '',
+                  authorUsername: '',
+                  isSeed: false,
+                  responseCount: 0,
+                  volunteerCount: 0,
+                  connectionCount: 0,
+                  communityCheckSimilar: 0,
+                  communityCheckNew: 0,
+                  createdAt: b.createdAt,
+                  updatedAt: b.createdAt,
+                };
+                await saveBookmark(currUser.uid, syntheticIdea, b.note);
+              }
+              localStorage.removeItem(GUEST_BOOKMARKS_STORAGE_KEY);
+              showToast(
+                `Synced ${guestBookmarks.length} saved ${
+                  guestBookmarks.length === 1 ? 'idea' : 'ideas'
+                } to your profile!`,
+                'success'
+              );
+            } catch (syncErr) {
+              console.warn('Could not sync guest bookmarks:', syncErr);
+            }
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : '';
           if (msg.includes('disabled')) {
@@ -392,7 +751,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setProfile(null);
         setIsAdmin(false);
         setNotifications([]);
-        setSavedBookmarks([]);
+        setSavedBookmarks(loadGuestBookmarks());
         setReports([]);
       }
       setAuthReady(true);
@@ -544,34 +903,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [user]);
 
-  // 2. Seed Starter Ideas if Firestore is completely empty, then stream real-time
+  // 2. Real-Time Ideas Stream & Seeding
   useEffect(() => {
-    let seededOnce = false;
+    seedInitialIdeasIfNeeded();
+
     const q = query(collection(db, 'ideas'), orderBy('createdAt', 'desc'), limit(200));
 
     const unsub = onSnapshot(
       q,
-      async (snapshot) => {
+      (snapshot) => {
         setIdeasError(null);
-        if (snapshot.empty && !seededOnce) {
-          seededOnce = true;
-          try {
-            for (const seed of SEED_IDEAS) {
-              const seedRef = doc(db, 'ideas', seed.id);
-              const existing = await getDoc(seedRef);
-              if (!existing.exists()) {
-                const { id: _id, ...payload } = seed;
-                await setDoc(seedRef, payload);
-              }
-            }
-          } catch {
-            // If rules prevent anonymous seeding, fallback to SEED_IDEAS in memory
-            setRawIdeas(SEED_IDEAS);
-            setIdeasLoading(false);
-          }
-          return;
-        }
-
         const fetched: Idea[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as Omit<Idea, 'id'>;
@@ -580,13 +921,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
 
-        setRawIdeas(fetched);
+        const fetchedIds = new Set(fetched.map((i) => i.id));
+        const combined = [...fetched];
+        for (const seed of DEFAULT_SEED_IDEAS) {
+          if (!fetchedIds.has(seed.id)) {
+            combined.push(seed);
+          }
+        }
+        combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        setRawIdeas(combined);
         setIdeasLoading(false);
       },
       (error) => {
         console.warn('Firestore ideas listener warning:', error);
-        setIdeasError('Live sync degraded — showing cached starter specifications.');
-        setRawIdeas(SEED_IDEAS);
+        setIdeasError('Live sync degraded. Please check your connection.');
+        setRawIdeas([]);
         setIdeasLoading(false);
       }
     );
@@ -602,11 +952,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (snapshot) => {
         const list: IdeaConnection[] = [];
         snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as Omit<IdeaConnection, 'id'>;
           list.push({
             id: docSnap.id,
-            ...(docSnap.data() as Omit<IdeaConnection, 'id'>),
+            ...data,
           });
         });
+
         setConnections(list);
       },
       () => {
@@ -654,7 +1006,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 5. User Bookmarks Real-Time Listener (`users/{uid}/bookmarks/{ideaId}`)
   useEffect(() => {
     if (!user) {
-      setSavedBookmarks([]);
+      setSavedBookmarks(loadGuestBookmarks());
       return;
     }
     const path = `users/${user.uid}/bookmarks`;
@@ -679,7 +1031,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           handleFirestoreError(err, OperationType.LIST, path);
         } catch {
-          setSavedBookmarks([]);
+          setSavedBookmarks(loadGuestBookmarks());
         }
       }
     );
@@ -719,15 +1071,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleSaveIdea = async (idea: Idea) => {
-    if (!user) return;
     const currentlySaved = isBookmarked(idea.id);
+    if (!user) {
+      const current = loadGuestBookmarks();
+      if (currentlySaved) {
+        const next = current.filter((b) => b.ideaId !== idea.id);
+        saveGuestBookmarksToStorage(next);
+        setSavedBookmarks(next);
+        showToast('Removed from your saved ideas.', 'info');
+      } else {
+        const newBookmark: SavedBookmark = {
+          id: `guest-${idea.id}`,
+          userId: 'guest',
+          ideaId: idea.id,
+          ideaTitle: idea.title,
+          ideaSummary: idea.summary,
+          ideaCategory: idea.category,
+          ideaHelpTrack: idea.helpTrack,
+          createdAt: new Date().toISOString(),
+        };
+        const next = [newBookmark, ...current.filter((b) => b.ideaId !== idea.id)];
+        saveGuestBookmarksToStorage(next);
+        setSavedBookmarks(next);
+        showToast('Saved to your ideas! Sign in anytime to sync to your profile.', 'success');
+      }
+      return;
+    }
+
     try {
       if (currentlySaved) {
         await removeBookmark(user.uid, idea.id);
         showToast('Removed from your saved ideas.', 'info');
       } else {
         await saveBookmark(user.uid, idea);
-        showToast('Saved to your bookmarks.', 'success');
+        showToast('Saved to your profile bookmarks.', 'success');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not update bookmark. Please try again.';
@@ -736,7 +1113,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveBookmarkNote = async (ideaId: string, note: string) => {
-    if (!user) return;
+    if (!user) {
+      const current = loadGuestBookmarks();
+      const next = current.map((b) =>
+        b.ideaId === ideaId ? { ...b, note: note.slice(0, 500) } : b
+      );
+      saveGuestBookmarksToStorage(next);
+      setSavedBookmarks(next);
+      showToast('Personal bookmark note saved.', 'success');
+      return;
+    }
     try {
       await updateBookmarkNote(user.uid, ideaId, note);
       showToast('Personal bookmark note saved.', 'success');
@@ -745,6 +1131,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(msg, 'error');
     }
   };
+
+  const profileWithPreferences: UserProfile | null = useMemo(() => {
+    if (!profile) return null;
+    return {
+      ...profile,
+      savedIdeaIds,
+      preferences: {
+        ...(profile.preferences || {}),
+        savedIdeaIds,
+      },
+    };
+  }, [profile, savedIdeaIds]);
 
   const ideas = simulateZeroState ? [] : rawIdeas;
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -778,7 +1176,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         user,
-        profile,
+        profile: profileWithPreferences,
         isAdmin,
         authReady,
         authLoading: !authReady,
