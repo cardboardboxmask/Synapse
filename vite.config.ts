@@ -55,7 +55,9 @@ function synapseDynamicSitemapPlugin(): Plugin {
 }
 
 export default defineConfig(() => {
+  const base = process.env.VITE_BASE_PATH || '/';
   return {
+    base,
     plugins: [
       synapseDynamicSitemapPlugin(),
       react(),

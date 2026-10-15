@@ -47,6 +47,9 @@ const NotificationsPage = React.lazy(() =>
 const AdminReportsPage = React.lazy(() =>
   import('./pages/AdminReportsPage').then((m) => ({ default: m.AdminReportsPage }))
 );
+const GitHubPage = React.lazy(() =>
+  import('./pages/GitHubPage').then((m) => ({ default: m.GitHubPage }))
+);
 const NotFoundPage = React.lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
 );
@@ -112,10 +115,15 @@ class AppErrorBoundary extends React.Component<
   }
 }
 
+const appBasename =
+  import.meta.env.BASE_URL && import.meta.env.BASE_URL !== '/'
+    ? import.meta.env.BASE_URL.replace(/\/+$/, '')
+    : undefined;
+
 export default function App() {
   return (
     <AppErrorBoundary>
-      <BrowserRouter>
+      <BrowserRouter basename={appBasename}>
         <AppProvider>
           <ScrollManager />
           <Layout>
@@ -144,6 +152,8 @@ export default function App() {
                 <Route path="/showcase/:id" element={<ShowcasePage />} />
                 <Route path="/about" element={<AboutSupportPage />} />
                 <Route path="/support" element={<Navigate to="/about" replace />} />
+                <Route path="/github" element={<GitHubPage />} />
+                <Route path="/open-source" element={<Navigate to="/github" replace />} />
                 <Route path="/terms" element={<LegalPage type="terms" />} />
                 <Route path="/privacy" element={<LegalPage type="privacy" />} />
                 <Route path="/sitemap" element={<Navigate to="/explore" replace />} />

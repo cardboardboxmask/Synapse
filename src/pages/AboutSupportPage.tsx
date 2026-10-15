@@ -46,16 +46,13 @@ export const AboutSupportPage: React.FC = () => {
             <ExternalLink className="w-4 h-4 opacity-75" />
           </a>
 
-          <a
-            href={SITE_CONFIG.githubUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to="/github"
             className="min-h-[48px] px-space-xl rounded-lg bg-surface-container-high hover:bg-surface-bright text-on-surface font-title-md text-title-md inline-flex items-center gap-2 transition-colors shadow-sm"
           >
             <Code2 className="w-5 h-5 text-secondary" />
-            <span>GitHub Repository</span>
-            <ExternalLink className="w-4 h-4 opacity-75" />
-          </a>
+            <span>GitHub &amp; Open Source</span>
+          </Link>
 
           <Link
             to="/explore"

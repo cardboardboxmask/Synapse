@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Synapse — Open Protocol Idea Registry</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10131b" />
+    <script type="text/javascript">
+      // Single Page Apps for GitHub Pages
+      // MIT License - https://github.com/rafgraph/spa-github-pages
+      // This script takes the current URL and converts the path and query
+      // string into just a query string, then redirects the browser
+      // to the new URL with only a query string and hash fragment.
+      var pathSegmentsToKeep = /^\/synapse/i.test(window.location.pathname) ? 1 : 0;
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: #10131b;
+        color: #e1e2ec;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .card {
+        text-align: center;
+        max-width: 440px;
+        padding: 32px 24px;
+        background: #191c24;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 12px;
+        color: #44e2cd;
+      }
+      p {
+        color: #c4c6d0;
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 0 0 20px;
+      }
+      a {
+        display: inline-block;
+        background-color: #44e2cd;
+        color: #003730;
+        font-weight: 600;
+        text-decoration: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      a:hover {
+        opacity: 0.9;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Redirecting to Synapse...</h1>
+      <p>Taking you to the requested page. If redirection does not occur within a moment, please click below.</p>
+      <a href="./">Return to Synapse</a>
+    </div>
+  </body>
+</html>

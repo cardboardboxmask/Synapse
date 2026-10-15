@@ -4,7 +4,7 @@
 export const SITE_CONFIG = {
   siteName: 'Synapse',
   tagline: 'Free, open idea network run by volunteers. No ads, no fees, ideas stay yours.',
-  githubUrl: 'https://github.com/cardboardboxmask/synapse',
+  githubUrl: 'https://github.com/cardboardboxmask/Synapse',
   buyMeACoffeeUrl: 'https://buymeacoffee.com/cardboardboxmask',
   canonicalBaseUrl: 'https://synapse.network',
 } as const;

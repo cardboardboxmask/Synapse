@@ -263,6 +263,19 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               >
                 About
               </NavLink>
+
+              <NavLink
+                to="/github"
+                className={({ isActive }) =>
+                  `min-h-[44px] inline-flex items-center whitespace-nowrap font-title-md text-title-md transition-colors focus-visible:outline-2 focus-visible:outline-primary-container rounded px-1 ${
+                    isActive
+                      ? 'text-on-surface font-semibold'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`
+                }
+              >
+                GitHub
+              </NavLink>
             </nav>
           </div>
 
@@ -634,13 +647,18 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     </Link>
                   </li>
                   <li className="min-h-[44px] flex items-center">
+                    <Link to="/github" className="hover:text-on-surface transition-colors">
+                      GitHub &amp; Open Source
+                    </Link>
+                  </li>
+                  <li className="min-h-[44px] flex items-center">
                     <a
                       href={SITE_CONFIG.githubUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-on-surface transition-colors inline-flex items-center gap-1"
                     >
-                      <span>GitHub</span>
+                      <span>Repository</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </li>
@@ -703,6 +721,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <span>·</span>
               <Link to="/about" className="hover:text-on-surface transition-colors">
                 About
+              </Link>
+              <span>·</span>
+              <Link to="/github" className="hover:text-on-surface transition-colors">
+                GitHub
               </Link>
             </div>
           </div>
