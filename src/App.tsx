@@ -116,9 +116,7 @@ class AppErrorBoundary extends React.Component<
 }
 
 const appBasename =
-  import.meta.env.BASE_URL && import.meta.env.BASE_URL !== '/'
-    ? import.meta.env.BASE_URL.replace(/\/+$/, '')
-    : undefined;
+  window.location.pathname.startsWith('/Synapse') ? '/Synapse' : undefined;
 
 export default function App() {
   return (
