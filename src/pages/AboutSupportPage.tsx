@@ -117,34 +117,57 @@ export const AboutSupportPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Community Code of Conduct */}
-      <section
-        id="conduct"
-        className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-md"
-      >
-        <div className="flex items-center gap-2 text-primary">
-          <Handshake className="w-6 h-6" />
+      {/* Frequently Asked Questions (FAQ) Section */}
+      <section className="bg-surface-container-low rounded-2xl p-space-xl flex flex-col gap-space-lg">
+        <div className="flex flex-col gap-2">
+          <span className="text-primary font-code-sm text-xs font-semibold uppercase tracking-wider">
+            FAQ &amp; Help
+          </span>
           <h2 className="font-headline-md text-headline-md text-on-surface">
-            Community Code of Conduct
+            Frequently Asked Questions
           </h2>
+          <p className="font-body-md text-on-surface-variant">
+            Everything you need to know about sharing ideas, collaborating, and open access on Synapse.
+          </p>
         </div>
-        <ul className="list-disc pl-5 space-y-2 font-body-md text-body-md text-on-surface-variant">
-          <li>
-            <strong className="text-on-surface">Critique ideas, never people:</strong> When giving
-            guidance or flagging similar existing projects, keep feedback technical, constructive,
-            and kind.
-          </li>
-          <li>
-            <strong className="text-on-surface">Respect creator attribution:</strong> Always honor
-            the poster’s chosen license (All Rights Kept, CC BY, or MIT) and credit contributors on
-            the Showcase.
-          </li>
-          <li>
-            <strong className="text-on-surface">No spam or commercial solicitation:</strong> Synapse
-            is a free community space for makers, not an agency lead generator. Use the Report
-            button on any idea to flag violations.
-          </li>
-        </ul>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+          <div className="bg-surface-container p-5 rounded-xl border border-surface-variant/30 flex flex-col gap-2">
+            <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
+              What is Synapse?
+            </h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              Synapse is a free, volunteer-run open protocol and community platform where makers, researchers, and students post real-world problem specifications, connect complementary specs, and volunteer to build prototypes.
+            </p>
+          </div>
+
+          <div className="bg-surface-container p-5 rounded-xl border border-surface-variant/30 flex flex-col gap-2">
+            <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
+              Who owns the ideas posted on Synapse?
+            </h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              Ideas belong 100% to their creators. Synapse operates on an open-access model with no platform fees, paywalls, or forced copyright assignments.
+            </p>
+          </div>
+
+          <div className="bg-surface-container p-5 rounded-xl border border-surface-variant/30 flex flex-col gap-2">
+            <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
+              How can I volunteer to build a prototype?
+            </h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              Browse any idea on the Explore page, view its problem specification and help track requirements, and offer to volunteer or connect your own complementary idea.
+            </p>
+          </div>
+
+          <div className="bg-surface-container p-5 rounded-xl border border-surface-variant/30 flex flex-col gap-2">
+            <h3 className="font-title-lg text-title-lg text-on-surface font-semibold">
+              Is Synapse open source?
+            </h3>
+            <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+              Yes! The entire Synapse codebase and platform are open source under the MIT License, deployable on GitHub Pages with automated GitHub Actions.
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   );
